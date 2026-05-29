@@ -140,10 +140,8 @@ async def init_db() -> None:
     factory = _get_factory()
     engine = _engine
 
-    is_sqlite = "sqlite" in str(engine.url)
-    if is_sqlite:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
     from sqlalchemy import select
     # Superadmin
