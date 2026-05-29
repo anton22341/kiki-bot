@@ -96,11 +96,8 @@ def _make_engine():
 
     return create_async_engine(
         url,
-        connect_args={"ssl": ssl_ctx, "statement_cache_size": 0},
-        pool_size=5,
-        max_overflow=10,
-        pool_pre_ping=True,
-        echo=False,
+        connect_args={"ssl": ssl_ctx},
+        echo=True,
     )
 
 
