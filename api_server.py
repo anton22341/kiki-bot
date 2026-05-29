@@ -573,7 +573,9 @@ async def api_delete_stat(request: web.Request) -> web.Response:
             stat = await stats_repo.get_stat_by_id(session, int(stat_id))
             if not stat:
                 return web.json_response({"error": "Не найдена"}, status=404)
-            session.delete(stat)
+            from sqlalchemy import delete as sa_delete
+            from models.db import HourlyStat
+            await session.execute(sa_delete(HourlyStat).where(HourlyStat.id == int(stat_id)))
             await session.commit()
 
         return web.json_response({"ok": True})
