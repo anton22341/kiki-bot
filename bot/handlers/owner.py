@@ -40,7 +40,7 @@ async def cmd_live(message: Message, role: str) -> None:
         total_left   = sum(s.left_count    for s in stats)
         total_denied = sum(s.denied        for s in stats)
 
-        bm = await stats_service.get_benchmark(session, night.id, 0, night.day_of_week)
+        bm = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
 
     from bot.messages import progress_bar
     capacity = 200
@@ -74,9 +74,10 @@ async def cmd_live(message: Message, role: str) -> None:
         f"🎯 FC конверсия: {fc}%\n"
     )
     if bm:
+        mode_str = f"в {cur_hour:02d}:00" if bm.get("mode") == "hour" else "за ночь"
         text += (
-            f"\n📊 Ср по {dow_ru.get(night.day_of_week, night.day_of_week)} ({bm['sample_count']} ночей):\n"
-            f"   Всего: ~{bm['avg_total']:.0f} | Д: ~{bm['avg_girls']:.0f} | П: ~{bm['avg_boys']:.0f}\n"
+            f"\n📊 Ср по {dow_ru.get(night.day_of_week, night.day_of_week)} {mode_str} ({bm['sample_count']} ночей):\n"
+            f"   Д: ~{bm['avg_girls']:.0f} | П: ~{bm['avg_boys']:.0f} | Всего: ~{bm['avg_total']:.0f}\n"
         )
     text += f"\n🕐 Обновлено: {now_str}"
     await message.answer(text)

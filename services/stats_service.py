@@ -85,14 +85,14 @@ def _emoji(signal: str) -> str:
 
 async def get_benchmark(session: AsyncSession, night_id: int, hour: int, day_of_week: str) -> dict | None:
     """
-    Benchmark по итогам ВСЕЙ ночи (не по конкретному часу).
-    Сравнивает текущую ночь со средними по историческим ночам того же дня недели.
-    Возвращает None если данных < 2 ночей.
+    Почасовой benchmark: сравниваем текущий час с тем же часом в прошлых ночах.
+    Если данных за этот час < 2 — берём avg по всем часам ночи как запасной вариант.
+    Возвращает None если < 2 исторических ночей.
     """
     from sqlalchemy import select
     from models.db import HourlyStat, ClubNight
 
-    # Все исторические ночи того же дня недели кроме текущей
+    # Все исторические ночи того же дня недели
     result = await session.execute(
         select(ClubNight).where(
             ClubNight.day_of_week == day_of_week,
@@ -103,36 +103,56 @@ async def get_benchmark(session: AsyncSession, night_id: int, hour: int, day_of_
     if len(hist_nights) < 2:
         return None
 
-    # Для каждой исторической ночи считаем итоги
-    night_totals = []
+    # Пробуем найти записи за тот же час
+    hour_records = []
     for n in hist_nights:
-        res = await session.execute(select(HourlyStat).where(HourlyStat.night_id == n.id))
+        res = await session.execute(
+            select(HourlyStat).where(HourlyStat.night_id == n.id)
+        )
         stats = res.scalars().all()
-        if not stats:
-            continue
-        g = sum(s.girls_entered for s in stats)
-        b = sum(s.boys_entered  for s in stats)
-        d = sum(s.denied        for s in stats)
-        l = sum(s.left_count    for s in stats)
-        inside = max(0, g + b - l)
-        night_totals.append({"girls": g, "boys": b, "denied": d, "inside": inside, "total": g + b})
+        for s in stats:
+            if s.recorded_at.hour == hour:
+                hour_records.append(s)
 
-    if len(night_totals) < 2:
-        return None
+    mode = "hour"
+    records = hour_records
 
-    avg_girls  = sum(t["girls"]  for t in night_totals) / len(night_totals)
-    avg_boys   = sum(t["boys"]   for t in night_totals) / len(night_totals)
-    avg_inside = sum(t["inside"] for t in night_totals) / len(night_totals)
-    avg_denied = sum(t["denied"] for t in night_totals) / len(night_totals)
-    avg_total  = sum(t["total"]  for t in night_totals) / len(night_totals)
+    # Если меньше 2 записей за этот час — берём средние по всей ночи
+    if len(records) < 2:
+        mode = "night"
+        night_totals = []
+        for n in hist_nights:
+            res = await session.execute(select(HourlyStat).where(HourlyStat.night_id == n.id))
+            stats = res.scalars().all()
+            if not stats:
+                continue
+            night_totals.append({
+                "girls": sum(s.girls_entered for s in stats),
+                "boys":  sum(s.boys_entered  for s in stats),
+                "denied": sum(s.denied for s in stats),
+            })
+        if len(night_totals) < 2:
+            return None
+        return {
+            "avg_girls":    round(sum(t["girls"]  for t in night_totals) / len(night_totals), 1),
+            "avg_boys":     round(sum(t["boys"]   for t in night_totals) / len(night_totals), 1),
+            "avg_denied":   round(sum(t["denied"] for t in night_totals) / len(night_totals), 1),
+            "avg_total":    round(sum(t["girls"] + t["boys"] for t in night_totals) / len(night_totals), 1),
+            "sample_count": len(night_totals),
+            "mode":         "night",  # сравниваем всю ночь
+        }
+
+    avg_girls  = sum(s.girls_entered for s in records) / len(records)
+    avg_boys   = sum(s.boys_entered  for s in records) / len(records)
+    avg_denied = sum(s.denied        for s in records) / len(records)
 
     return {
-        "avg_girls":     round(avg_girls, 1),
-        "avg_boys":      round(avg_boys, 1),
-        "avg_inside":    round(avg_inside, 1),
-        "avg_denied":    round(avg_denied, 1),
-        "avg_total":     round(avg_total, 1),
-        "sample_count":  len(night_totals),
+        "avg_girls":    round(avg_girls, 1),
+        "avg_boys":     round(avg_boys, 1),
+        "avg_denied":   round(avg_denied, 1),
+        "avg_total":    round(avg_girls + avg_boys, 1),
+        "sample_count": len(records),
+        "mode":         "hour",  # сравниваем конкретный час
     }
 
 

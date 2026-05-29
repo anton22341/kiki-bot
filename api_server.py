@@ -100,7 +100,7 @@ async def api_live(request: web.Request) -> web.Response:
         # Benchmark
         from datetime import datetime as _dt
         cur_hour = _dt.utcnow().hour
-        bm = await stats_service.get_benchmark(session, night.id, 0, night.day_of_week)
+        bm = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
 
     def delta_pct(cur, avg):
         if not avg:
