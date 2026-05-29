@@ -514,11 +514,31 @@ python main.py
 # HTTP API: http://localhost:8080
 ```
 
-## Что ещё нужно перед продакшном
+## Деплой на Railway (2026-05-29)
 
-1. Задеплоить `miniapp/index.html` на GitHub Pages / Netlify (или оставить на aiohttp порту 8080)
-2. Прописать `WEBAPP_URL=http://IP:8080` в `.env` (для локальной сети) или HTTPS URL
-3. Для настоящей Telegram WebApp нужен HTTPS — ngrok или публичный сервер
+**Статус:** ✅ БОТ РАБОТАЕТ
+
+### Инфраструктура
+- **Платформа:** Railway (план Pro)
+- **БД:** Railway PostgreSQL (встроенная, не Supabase — пулер Supabase не работал: tenant not found)
+- **URL бота:** https://web-production-5d05b.up.railway.app
+- **Домен:** www.kiki-analysis.ru (DNS обновляется, ~60 мин)
+
+### Переменные Railway (web сервис)
+- `BOT_TOKEN` — токен бота
+- `SUPERADMIN_ID` — 1124050597
+- `WEBAPP_URL` — https://www.kiki-analysis.ru
+- `DATABASE_URL` — ${{Postgres.DATABASE_URL}} (Railway PostgreSQL)
+
+### Проблемы при деплое
+- Supabase pooler (порт 6543 и 5432) — `tenant not found` для проекта effkvrrzjtoilzcakhsf
+- Прямое подключение Supabase — IPv6 only, Railway на IPv4
+- Решение: Railway встроенный PostgreSQL
+
+### DNS записи (рег.ру)
+- CNAME: `www.kiki-analysis.ru` → `v4eq8d44.up.railway.app`
+- TXT: `_railway-verify.www` → railway-verify=5df84c0ea941011fe40d7a432...
+- TXT: `_railway-verify` → railway-verify=945f7885360c83e48043092b5...
 
 ## Исправления от 2026-05-29
 
