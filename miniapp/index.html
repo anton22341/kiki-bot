@@ -1572,6 +1572,7 @@ async function deleteCurrentStat() {
       showToast('✓ Запись удалена');
       closeEditStat();
       loadHistory();
+      loadLive();
     } else {
       showToast(res.error || 'Ошибка');
     }
@@ -1605,6 +1606,13 @@ async function init() {
   // Вкладка Цели в Статах — только superadmin
   const goalsTab = document.querySelector('.subtab[onclick="switchSubtab(\'goals\')"]');
   if (goalsTab) goalsTab.style.display = currentUserRole === 'superadmin' ? '' : 'none';
+
+  // Admin — только Ввод, без аналитики
+  if (currentUserRole === 'admin') {
+    document.getElementById('nav-live').style.display = 'none';
+    document.getElementById('nav-night').style.display = 'none';
+    document.getElementById('nav-week').style.display = 'none';
+  }
 
   // Pending — ничего не видит
   if (currentUserRole === 'pending') {
