@@ -1,9 +1,11 @@
+from __future__ import annotations
 import hmac
 import hashlib
 import json
 import logging
 import urllib.parse
 from pathlib import Path
+from typing import Optional
 from aiohttp import web
 from models.db import AsyncSessionLocal
 from repositories import user_repo, stats_repo
