@@ -463,8 +463,10 @@ async def api_input(request: web.Request) -> web.Response:
         if not user or user.role not in ("superadmin", "admin"):
             return web.json_response({"error": "Forbidden"}, status=403)
 
-        night_date = _night_date(recorded_at)
-        dow = _dow(recorded_at)
+        # Ночь определяем по РЕАЛЬНОМУ серверному времени MSK, не по ручному
+        real_now = now_msk()
+        night_date = _night_date(real_now)
+        dow = _dow(real_now)
         from repositories.stats_repo import get_or_create_night, save_stat
         night = await get_or_create_night(session, night_date, dow)
         await save_stat(session, night.id, {
@@ -627,6 +629,35 @@ async def api_delete_stat(request: web.Request) -> web.Response:
 
 
 @require_superadmin
+async def api_delete_night(request: web.Request) -> web.Response:
+    """Удалить все данные за конкретную ночь."""
+    try:
+        body = await request.json()
+        date_str = body.get("date")
+        if not date_str:
+            return web.json_response({"error": "date required"}, status=400)
+        from sqlalchemy import select, delete as sa_delete
+        from models.db import ClubNight, HourlyStat, EditLog
+        async with AsyncSessionLocal() as session:
+            res = await session.execute(select(ClubNight).where(ClubNight.date == date_str))
+            night = res.scalar_one_or_none()
+            if not night:
+                return web.json_response({"error": "Ночь не найдена"}, status=404)
+            # Удаляем edit_logs → stats → night
+            stats_res = await session.execute(select(HourlyStat.id).where(HourlyStat.night_id == night.id))
+            stat_ids = [r[0] for r in stats_res.all()]
+            if stat_ids:
+                await session.execute(sa_delete(EditLog).where(EditLog.stat_id.in_(stat_ids)))
+                await session.execute(sa_delete(HourlyStat).where(HourlyStat.night_id == night.id))
+            await session.execute(sa_delete(ClubNight).where(ClubNight.id == night.id))
+            await session.commit()
+        return web.json_response({"ok": True, "date": date_str, "stats_deleted": len(stat_ids)})
+    except Exception as e:
+        logger.error("api_delete_night: %s", e)
+        return web.json_response({"error": str(e)}, status=500)
+
+
+@require_superadmin
 async def api_import_historical(request: web.Request) -> web.Response:
     """Одноразовый импорт исторических данных."""
     try:
@@ -757,6 +788,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/users/remove", api_remove_user)
     app.router.add_get("/api/settings", api_get_settings)
     app.router.add_post("/api/admin/import-historical", api_import_historical)
+    app.router.add_post("/api/admin/delete-night", api_delete_night)
     app.router.add_post("/api/settings", api_save_settings)
     app.router.add_static("/miniapp", MINIAPP_DIR)
     return app

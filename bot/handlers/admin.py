@@ -44,8 +44,11 @@ def _day_of_week(dt: datetime) -> str:
 
 async def _save_stat_data(session, data: dict, user_id: int) -> None:
     now = data.get("recorded_at", now_msk())
-    night_date = _get_night_date(now)
-    dow = _day_of_week(now)
+    # Ночь всегда определяем по РЕАЛЬНОМУ времени сохранения, а не по ручному времени
+    # (чтобы 01:30 MSK в пятницу вечером не уходило в четверг)
+    real_now = data.get("real_now", now_msk())
+    night_date = _get_night_date(real_now)
+    dow = _day_of_week(real_now)
     night = await stats_repo.get_or_create_night(session, night_date, dow)
     # Поддержка нового формата (girls_left/boys_left) и старого (left)
     girls_left = data.get("girls_left", 0)
@@ -83,7 +86,7 @@ async def cmd_input(message: Message, role: str, user: User, state: FSMContext) 
         now = now_msk()
         await state.set_data({
             "girls": girls, "boys": boys, "left": left, "denied": denied,
-            "recorded_at": now.isoformat(), "is_manual_time": False,
+            "recorded_at": now.isoformat(), "real_now": now.isoformat(), "is_manual_time": False,
         })
         await state.set_state(InputStats.confirm)
         card = format_stat_card(girls, boys, left, denied, now.strftime("%H:%M"), False)
@@ -161,7 +164,7 @@ async def fsm_denied(message: Message, state: FSMContext, role: str) -> None:
 
     now = now_msk()
     data = await state.get_data()
-    data.update({"denied": val, "recorded_at": now.isoformat(), "is_manual_time": False})
+    data.update({"denied": val, "recorded_at": now.isoformat(), "real_now": now.isoformat(), "is_manual_time": False})
     await state.set_data(data)
     await state.set_state(InputStats.confirm)
 
@@ -178,6 +181,8 @@ async def cb_stat_save(callback: CallbackQuery, state: FSMContext, user: User, r
 
     data = await state.get_data()
     data["recorded_at"] = datetime.fromisoformat(data["recorded_at"])
+    if "real_now" in data:
+        data["real_now"] = datetime.fromisoformat(data["real_now"])
 
     async with AsyncSessionLocal() as session:
         await _save_stat_data(session, data, user.id)
