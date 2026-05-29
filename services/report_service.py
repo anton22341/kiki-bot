@@ -66,26 +66,20 @@ async def build_night_report(session: AsyncSession, night_id: int) -> str:
         entered = s.girls_entered + s.boys_entered
         bar = progress_bar(entered, max_val, 8)
         bm = await get_benchmark(session, night.id, s.recorded_at.hour, night.day_of_week)
-        if bm and bm["avg_inside"] > 0:
-            inside_cum = 0
-            for prev in stats:
-                if prev.recorded_at <= s.recorded_at:
-                    inside_cum += prev.girls_entered + prev.boys_entered - prev.left_count
-            inside_cum = max(0, inside_cum)
-            d = round((inside_cum / bm["avg_inside"] - 1) * 100)
+        avg_total = bm.get("avg_total", 0) if bm else 0
+        if bm and avg_total > 0:
+            d = round((entered / avg_total - 1) * 100)
             delta_str = f" {_emoji('green' if d > 15 else 'red' if d < -15 else 'orange')}{'+' if d >= 0 else ''}{d}%"
         else:
             delta_str = " (сейчас)" if not night.closed_at and s == stats[-1] else ""
         lines.append(f"{s.recorded_at.strftime('%H:%M')}  {bar} {entered}{delta_str}")
 
     # Benchmark итог за ночь
-    bm_night = await get_benchmark(session, night.id, stats[0].recorded_at.hour, night.day_of_week)
-    if bm_night:
-        night_avg_entered = bm_night["avg_inside"] * len(stats) if bm_night else 0
-        if night_avg_entered > 0:
-            d_night = round((total_entered / night_avg_entered - 1) * 100)
-            em = _emoji("green" if d_night > 15 else "red" if d_night < -15 else "orange")
-            lines.append(f"\n{em} vs исторический avg ({night.day_of_week}): {'+' if d_night >= 0 else ''}{d_night}%")
+    bm_night = await get_benchmark(session, night.id, 0, night.day_of_week)
+    if bm_night and bm_night.get("avg_total", 0) > 0:
+        d_night = round((total_entered / bm_night["avg_total"] - 1) * 100)
+        em = _emoji("green" if d_night > 15 else "red" if d_night < -15 else "orange")
+        lines.append(f"\n{em} vs исторический avg ({night.day_of_week}): {'+' if d_night >= 0 else ''}{d_night}%")
 
     return "\n".join(lines)
 

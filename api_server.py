@@ -127,7 +127,7 @@ async def api_live(request: web.Request) -> web.Response:
             "avg_total":      bm["avg_total"],
             "avg_girls":      bm["avg_girls"],
             "avg_boys":       bm["avg_boys"],
-            "avg_inside":     bm["avg_inside"],
+            "avg_inside":     bm.get("avg_inside", 0),
             "delta_total":    d_total,
             "delta_girls":    d_girls,
             "delta_boys":     d_boys,
