@@ -89,9 +89,14 @@ def _make_engine():
     url = raw.replace("postgresql://", "postgresql+asyncpg://", 1)
     url = url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
 
+    import ssl as _ssl
+    ssl_ctx = _ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = _ssl.CERT_NONE
+
     return create_async_engine(
         url,
-        connect_args={"ssl": True, "statement_cache_size": 0},
+        connect_args={"ssl": ssl_ctx, "statement_cache_size": 0},
         pool_size=5,
         max_overflow=10,
         pool_pre_ping=True,
