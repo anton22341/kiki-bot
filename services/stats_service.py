@@ -114,34 +114,35 @@ async def get_benchmark(session: AsyncSession, night_id: int, hour: int, day_of_
             if s.recorded_at.hour == hour:
                 hour_records.append(s)
 
-    mode = "hour"
+    # Если меньше 2 записей за текущий час — ищем ближайший час с достаточной выборкой
     records = hour_records
-
-    # Если меньше 2 записей за этот час — берём средние по всей ночи
+    used_hour = hour
     if len(records) < 2:
-        mode = "night"
-        night_totals = []
+        # Собираем все доступные записи по часам из исторических ночей
+        all_by_hour: dict[int, list] = {}
         for n in hist_nights:
             res = await session.execute(select(HourlyStat).where(HourlyStat.night_id == n.id))
-            stats = res.scalars().all()
-            if not stats:
-                continue
-            night_totals.append({
-                "girls": sum(s.girls_entered for s in stats),
-                "boys":  sum(s.boys_entered  for s in stats),
-                "denied": sum(s.denied for s in stats),
-            })
-        if len(night_totals) < 2:
-            return None
-        return {
-            "avg_girls":    round(sum(t["girls"]  for t in night_totals) / len(night_totals), 1),
-            "avg_boys":     round(sum(t["boys"]   for t in night_totals) / len(night_totals), 1),
-            "avg_denied":   round(sum(t["denied"] for t in night_totals) / len(night_totals), 1),
-            "avg_total":    round(sum(t["girls"] + t["boys"] for t in night_totals) / len(night_totals), 1),
-            "sample_count": len(night_totals),
-            "mode":         "night",  # сравниваем всю ночь
-        }
+            for s in res.scalars().all():
+                all_by_hour.setdefault(s.recorded_at.hour, []).append(s)
 
+        # Ищем ближайший час с >= 2 записями
+        found_hour = None
+        for delta in range(1, 12):
+            for candidate in (hour - delta, hour + delta):
+                h = candidate % 24
+                if len(all_by_hour.get(h, [])) >= 2:
+                    found_hour = h
+                    break
+            if found_hour is not None:
+                break
+
+        if found_hour is None:
+            return None
+
+        records = all_by_hour[found_hour]
+        used_hour = found_hour
+
+    mode = "hour"
     avg_girls  = sum(s.girls_entered for s in records) / len(records)
     avg_boys   = sum(s.boys_entered  for s in records) / len(records)
     avg_denied = sum(s.denied        for s in records) / len(records)
@@ -152,7 +153,8 @@ async def get_benchmark(session: AsyncSession, night_id: int, hour: int, day_of_
         "avg_denied":   round(avg_denied, 1),
         "avg_total":    round(avg_girls + avg_boys, 1),
         "sample_count": len(records),
-        "mode":         "hour",  # сравниваем конкретный час
+        "mode":         "hour",
+        "used_hour":    used_hour,
     }
 
 

@@ -1116,13 +1116,18 @@ async function loadLive() {
       document.getElementById('bm-delta-girls').innerHTML = fmtDelta(bm.delta_girls, bm.signal_girls);
       document.getElementById('bm-delta-boys').innerHTML  = fmtDelta(bm.delta_boys,  bm.signal_boys);
       const DOW_RU = {fri:'пятницам',sat:'субботам',mon:'понедельникам',tue:'вторникам',wed:'средам',thu:'четвергам',sun:'воскресеньям'};
-      document.getElementById('bm-sample').textContent = `Выборка: ${bm.sample_count} ночей по ${DOW_RU[bm.day_of_week]||bm.day_of_week}`;
+      const usedH = bm.used_hour;
+      const curH2 = new Date().getHours();
+      const hourNote = (usedH !== undefined && usedH !== curH2) ? ` · данные за ${String(usedH).padStart(2,'0')}:xx` : '';
+      document.getElementById('bm-sample').textContent = `Выборка: ${bm.sample_count} ночей по ${DOW_RU[bm.day_of_week]||bm.day_of_week}${hourNote}`;
     } else {
       bmBlock.style.display = 'none';
     }
 
-    // Doughnut — кто сейчас ВНУТРИ (не вошло за всё время)
-    mkDoughnut('live-ratio-chart', d.girls_inside||0, d.boys_inside||0, 'live-ratio-pct', 'live-ratio-abs');
+    // Doughnut — внутри если есть, иначе вошло за всю ночь
+    const dG = (d.girls_inside||0) + (d.boys_inside||0) > 0 ? d.girls_inside : d.girls_entered;
+    const dB = (d.girls_inside||0) + (d.boys_inside||0) > 0 ? d.boys_inside  : d.boys_entered;
+    mkDoughnut('live-ratio-chart', dG||0, dB||0, 'live-ratio-pct', 'live-ratio-abs');
 
     if (hasData) {
       const curH = new Date().getHours();
@@ -1130,6 +1135,8 @@ async function loadLive() {
         data:d.hourly.map(h=>h.entered), borderRadius:4,
         backgroundColor:d.hourly.map(h=>parseInt(h.time)===curH?'#FF6B00':'rgba(255,107,0,0.3)'),
       }]);
+    } else {
+      if (charts['live-chart']) { charts['live-chart'].destroy(); delete charts['live-chart']; }
     }
   } catch(e) { console.error('loadLive',e); }
 }
