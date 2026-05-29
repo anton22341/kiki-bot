@@ -567,10 +567,14 @@ async def api_delete_stat(request: web.Request) -> web.Response:
             return web.json_response({"error": "id required"}, status=400)
 
         from sqlalchemy import delete as sa_delete
-        from models.db import HourlyStat
+        from models.db import HourlyStat, EditLog
         async with AsyncSessionLocal() as session:
+            sid = int(stat_id)
+            # Сначала удаляем связанные edit_logs (foreign key)
+            await session.execute(sa_delete(EditLog).where(EditLog.stat_id == sid))
+            # Затем удаляем саму запись
             result = await session.execute(
-                sa_delete(HourlyStat).where(HourlyStat.id == int(stat_id))
+                sa_delete(HourlyStat).where(HourlyStat.id == sid)
             )
             await session.commit()
             if result.rowcount == 0:
