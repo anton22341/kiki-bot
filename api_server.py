@@ -312,15 +312,10 @@ async def api_kpi(request: web.Request) -> web.Response:
 
 @require_superadmin
 async def api_users_list(request: web.Request) -> web.Response:
-    tg_user = get_tg_user(request)
-    requester_id = tg_user.get("id")
     async with AsyncSessionLocal() as session:
         users = await user_repo.get_all(session)
-    # Главный superadmin (SUPERADMIN_ID) скрыт от всех кроме себя
-    filtered = [
-        u for u in users
-        if not (u.telegram_id == settings.SUPERADMIN_ID and requester_id != settings.SUPERADMIN_ID)
-    ]
+    # Главный superadmin всегда скрыт из списка
+    filtered = [u for u in users if u.telegram_id != settings.SUPERADMIN_ID]
     return web.json_response({"users": [
         {
             "telegram_id": u.telegram_id,
