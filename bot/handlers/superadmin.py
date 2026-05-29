@@ -22,6 +22,8 @@ async def cmd_users(message: Message, role: str) -> None:
         return
     async with AsyncSessionLocal() as session:
         users = await user_repo.get_all(session)
+    from config import settings
+    users = [u for u in users if u.telegram_id != settings.SUPERADMIN_ID]
     await message.answer(format_users_list(users))
 
 
