@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from utils.time import now_msk
 from models.db import ClubNight, HourlyStat, EditLog
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ async def get_or_create_night(session: AsyncSession, date: str, day_of_week: str
     result = await session.execute(select(ClubNight).where(ClubNight.date == date))
     night = result.scalar_one_or_none()
     if not night:
-        night = ClubNight(date=date, day_of_week=day_of_week, opened_at=datetime.utcnow())
+        night = ClubNight(date=date, day_of_week=day_of_week, opened_at=now_msk())
         session.add(night)
         await session.commit()
         await session.refresh(night)
@@ -110,5 +111,5 @@ async def close_night(session: AsyncSession, night_id: int) -> None:
     result = await session.execute(select(ClubNight).where(ClubNight.id == night_id))
     night = result.scalar_one_or_none()
     if night:
-        night.closed_at = datetime.utcnow()
+        night.closed_at = now_msk()
         await session.commit()

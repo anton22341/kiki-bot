@@ -525,6 +525,31 @@
         </div>
       </div>
 
+      <!-- Benchmark блок -->
+      <div class="card" id="live-bm-block" style="display:none">
+        <div class="card-title">📊 В это же время обычно</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+          <div style="text-align:center;flex:1;">
+            <div style="font-size:11px;color:var(--w30);margin-bottom:2px;">Всего</div>
+            <div style="font-size:18px;font-weight:600;" id="bm-avg-total">—</div>
+            <div style="font-size:12px;margin-top:2px;" id="bm-delta-total"></div>
+          </div>
+          <div style="width:1px;background:rgba(255,255,255,0.08);height:40px;"></div>
+          <div style="text-align:center;flex:1;">
+            <div style="font-size:11px;color:var(--w30);margin-bottom:2px;">👧 Девушки</div>
+            <div style="font-size:18px;font-weight:600;" id="bm-avg-girls">—</div>
+            <div style="font-size:12px;margin-top:2px;" id="bm-delta-girls"></div>
+          </div>
+          <div style="width:1px;background:rgba(255,255,255,0.08);height:40px;"></div>
+          <div style="text-align:center;flex:1;">
+            <div style="font-size:11px;color:var(--w30);margin-bottom:2px;">👦 Парни</div>
+            <div style="font-size:18px;font-weight:600;" id="bm-avg-boys">—</div>
+            <div style="font-size:12px;margin-top:2px;" id="bm-delta-boys"></div>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--w30);margin-top:8px;text-align:center;" id="bm-sample"></div>
+      </div>
+
       <div class="card">
         <div class="card-title">Почасовой поток сегодня</div>
         <div class="chart-wrap"><canvas id="live-chart"></canvas></div>
@@ -1071,6 +1096,30 @@ async function loadLive() {
     document.getElementById('live-bm-inside').innerHTML = bm ? fmtBm(bm.delta_total,  bm.signal_total,  bm.avg_total)  : '';
     document.getElementById('live-bm-girls').innerHTML  = bm ? fmtBm(bm.delta_girls,  bm.signal_girls,  bm.avg_girls)  : '';
     document.getElementById('live-bm-boys').innerHTML   = bm ? fmtBm(bm.delta_boys,   bm.signal_boys,   bm.avg_boys)   : '';
+
+    // Benchmark блок над графиком
+    const bmBlock = document.getElementById('live-bm-block');
+    if (bm) {
+      bmBlock.style.display = '';
+      const SIG_COLOR2 = { green: '#34C759', orange: '#FF9500', red: '#FF3B30' };
+      const SIG_EMOJI2 = { green: '🟢', orange: '🟠', red: '🔴' };
+      function fmtDelta(d, sig) {
+        if (d === null || d === undefined) return '';
+        const c = SIG_COLOR2[sig] || '#FF9500';
+        const e = SIG_EMOJI2[sig] || '';
+        return `<span style="color:${c}">${e} ${d >= 0 ? '+' : ''}${d}%</span>`;
+      }
+      document.getElementById('bm-avg-total').textContent = Math.round(bm.avg_total);
+      document.getElementById('bm-avg-girls').textContent = Math.round(bm.avg_girls);
+      document.getElementById('bm-avg-boys').textContent  = Math.round(bm.avg_boys);
+      document.getElementById('bm-delta-total').innerHTML = fmtDelta(bm.delta_total, bm.signal_total);
+      document.getElementById('bm-delta-girls').innerHTML = fmtDelta(bm.delta_girls, bm.signal_girls);
+      document.getElementById('bm-delta-boys').innerHTML  = fmtDelta(bm.delta_boys,  bm.signal_boys);
+      const DOW_RU = {fri:'пятницам',sat:'субботам',mon:'понедельникам',tue:'вторникам',wed:'средам',thu:'четвергам',sun:'воскресеньям'};
+      document.getElementById('bm-sample').textContent = `Выборка: ${bm.sample_count} ночей по ${DOW_RU[bm.day_of_week]||bm.day_of_week}`;
+    } else {
+      bmBlock.style.display = 'none';
+    }
 
     // Doughnut — кто сейчас ВНУТРИ (не вошло за всё время)
     mkDoughnut('live-ratio-chart', d.girls_inside||0, d.boys_inside||0, 'live-ratio-pct', 'live-ratio-abs');

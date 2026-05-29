@@ -11,6 +11,7 @@ from models.db import AsyncSessionLocal
 from repositories import user_repo, stats_repo
 from services import stats_service, report_service
 from config import settings
+from utils.time import now_msk
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ async def api_live(request: web.Request) -> web.Response:
 
         # Benchmark
         from datetime import datetime as _dt
-        cur_hour = _dt.utcnow().hour
+        cur_hour = now_msk().hour
         bm = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
 
     def delta_pct(cur, avg):
@@ -154,12 +155,16 @@ async def api_live(request: web.Request) -> web.Response:
 
 @require_auth
 async def api_nights_list(request: web.Request) -> web.Response:
-    """Список всех доступных ночей для навигации."""
-    from sqlalchemy import select
-    from models.db import ClubNight
+    """Список ночей у которых есть хотя бы одна запись HourlyStat."""
+    from sqlalchemy import select, func
+    from models.db import ClubNight, HourlyStat
+    from datetime import datetime
     async with AsyncSessionLocal() as session:
+        # Только ночи с данными
         result = await session.execute(
             select(ClubNight.date, ClubNight.day_of_week, ClubNight.closed_at)
+            .join(HourlyStat, HourlyStat.night_id == ClubNight.id)
+            .group_by(ClubNight.date, ClubNight.day_of_week, ClubNight.closed_at)
             .order_by(ClubNight.date.desc())
         )
         rows = result.all()
@@ -168,7 +173,6 @@ async def api_nights_list(request: web.Request) -> web.Response:
     DAY_RU = {"mon":"Пн","tue":"Вт","wed":"Ср","thu":"Чт","fri":"Пт","sat":"Сб","sun":"Вс"}
     nights = []
     for date_str, dow, closed_at in rows:
-        from datetime import datetime
         d = datetime.strptime(date_str, "%Y-%m-%d")
         label = f"{DAY_RU.get(dow,'')} {d.day} {MONTHS_SHORT[d.month]}"
         nights.append({"date": date_str, "label": label, "is_open": closed_at is None})
@@ -244,7 +248,7 @@ async def api_week(request: web.Request) -> web.Response:
     from datetime import datetime, timedelta
     from sqlalchemy import select
     from models.db import ClubNight
-    now = datetime.utcnow()
+    now = now_msk()
     two_weeks_ago = (now - timedelta(days=14)).strftime("%Y-%m-%d")
     async with AsyncSessionLocal() as session:
         result = await session.execute(
@@ -269,7 +273,7 @@ async def api_month(request: web.Request) -> web.Response:
     from datetime import datetime
     from sqlalchemy import select
     from models.db import ClubNight
-    now = datetime.utcnow()
+    now = now_msk()
     month_start = now.replace(day=1).strftime("%Y-%m-%d")
     async with AsyncSessionLocal() as session:
         result = await session.execute(
@@ -294,7 +298,7 @@ async def api_kpi(request: web.Request) -> web.Response:
     from datetime import datetime
     from sqlalchemy import select
     from models.db import ClubNight
-    now = datetime.utcnow()
+    now = now_msk()
     month_start = now.replace(day=1).strftime("%Y-%m-%d")
     async with AsyncSessionLocal() as session:
         result = await session.execute(
@@ -713,7 +717,7 @@ async def api_save_settings(request: web.Request) -> web.Response:
             setting = res.scalar_one_or_none()
             if setting:
                 setting.value = str(val)
-                setting.updated_at = datetime.utcnow()
+                setting.updated_at = now_msk()
             else:
                 session.add(ClubSettings(key=key, value=str(val)))
         await session.commit()

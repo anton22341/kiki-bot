@@ -6,6 +6,7 @@ from aiogram.types import Message
 from models.db import AsyncSessionLocal
 from repositories import stats_repo
 from services import stats_service, report_service
+from utils.time import now_msk
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -25,8 +26,7 @@ async def cmd_live(message: Message, role: str) -> None:
             await message.answer("🔴 Активной ночи нет. Данные ещё не введены.")
             return
 
-        import datetime as _dt
-        now = _dt.datetime.utcnow()
+        now = now_msk()
         cur_hour = now.hour
 
         inside = await stats_service.get_live_occupancy(session, night.id)

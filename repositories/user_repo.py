@@ -4,6 +4,7 @@ from typing import Optional
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.db import User
+from utils.time import now_msk
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ async def set_role(session: AsyncSession, telegram_id: int, role: str, added_by_
     await session.execute(
         update(User)
         .where(User.telegram_id == telegram_id)
-        .values(role=role, role_set_at=datetime.utcnow(), added_by=added_by_id)
+        .values(role=role, role_set_at=now_msk(), added_by=added_by_id)
     )
     await session.commit()
     return await get_by_telegram_id(session, telegram_id)

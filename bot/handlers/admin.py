@@ -2,6 +2,7 @@ from __future__ import annotations
 import logging
 import json
 from datetime import datetime, timedelta
+from utils.time import now_msk
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -42,7 +43,7 @@ def _day_of_week(dt: datetime) -> str:
 
 
 async def _save_stat_data(session, data: dict, user_id: int) -> None:
-    now = data.get("recorded_at", datetime.utcnow())
+    now = data.get("recorded_at", now_msk())
     night_date = _get_night_date(now)
     dow = _day_of_week(now)
     night = await stats_repo.get_or_create_night(session, night_date, dow)
@@ -79,7 +80,7 @@ async def cmd_input(message: Message, role: str, user: User, state: FSMContext) 
             await message.answer("Неверный формат. Пример: /input 45 32 8 5")
             return
 
-        now = datetime.utcnow()
+        now = now_msk()
         await state.set_data({
             "girls": girls, "boys": boys, "left": left, "denied": denied,
             "recorded_at": now.isoformat(), "is_manual_time": False,
@@ -158,7 +159,7 @@ async def fsm_denied(message: Message, state: FSMContext, role: str) -> None:
         await message.answer("Введи число.")
         return
 
-    now = datetime.utcnow()
+    now = now_msk()
     data = await state.get_data()
     data.update({"denied": val, "recorded_at": now.isoformat(), "is_manual_time": False})
     await state.set_data(data)

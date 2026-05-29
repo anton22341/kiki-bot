@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from utils.time import now_msk
 from models.db import ClubNight, HourlyStat, EditLog, User
 from repositories import stats_repo
 from services.stats_service import calc_deviation, get_historical_avg
@@ -93,7 +94,7 @@ CLUB_DAYS = ("fri", "sat")  # клуб работает только пт и с�
 
 
 async def build_week_report(session: AsyncSession) -> str:
-    now = datetime.utcnow()
+    now = now_msk()
     # Ищем последние 2 рабочих уик-энда (8 последних ночей — с запасом)
     week_ago = now - timedelta(days=14)
     result = await session.execute(
@@ -143,7 +144,7 @@ async def build_week_report(session: AsyncSession) -> str:
 
 
 async def build_month_report(session: AsyncSession) -> str:
-    now = datetime.utcnow()
+    now = now_msk()
     month_start = now.replace(day=1).strftime("%Y-%m-%d")
     result = await session.execute(
         select(ClubNight)
@@ -181,7 +182,7 @@ async def build_month_report(session: AsyncSession) -> str:
 
 
 async def build_kpi_report(session: AsyncSession) -> str:
-    now = datetime.utcnow()
+    now = now_msk()
     month_start = now.replace(day=1).strftime("%Y-%m-%d")
     result = await session.execute(
         select(ClubNight).where(ClubNight.date >= month_start).order_by(ClubNight.date)
@@ -229,7 +230,7 @@ async def build_hourly_report(session: AsyncSession, night: ClubNight) -> str:
     if not stats:
         return ""
 
-    now = datetime.utcnow()
+    now = now_msk()
     last = stats[-1]
     hour_entered = last.girls_entered + last.boys_entered
     hour_left = last.left_count
