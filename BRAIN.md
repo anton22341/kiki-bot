@@ -599,5 +599,39 @@ python main.py 2>&1 | grep -v DEBUG
 
 ---
 
+## Этап 11 — Исторические данные и Benchmark
+
+**Статус:** `[x]`
+**Дата:** 2026-05-29
+
+### Что сделано
+- Добавлено поле `is_historical` в модель `HourlyStat`
+- Создан `scripts/import_historical.py` — импорт 4 ночей из хардкода
+- Добавлен `get_benchmark()` в `stats_service.py`
+- Обновлён `/live` хендлер — показывает delta 🟢🟠🔴 vs исторический avg
+- Обновлён `/night` хендлер — delta в почасовой таблице
+- Mini App Live — benchmark под карточками девушек/парней
+- API endpoint `/api/admin/import-historical` для запуска импорта на сервере
+
+### Данные импортированы (локально)
+- 4 ночи: Пт 15.05, Сб 16.05, Пт 22.05, Сб 23.05
+- 20 записей HourlyStat
+
+### Файлы изменены
+- `models/db.py` — +is_historical колонка, +ALTER TABLE миграция
+- `services/stats_service.py` — +get_benchmark(), +_signal(), +_emoji()
+- `services/report_service.py` — benchmark в /night почасовой таблице
+- `bot/handlers/owner.py` — обновлён /live с benchmark
+- `api_server.py` — benchmark в /api/live, +/api/admin/import-historical
+- `miniapp/index.html` — Live экран с benchmark
+- `scripts/import_historical.py` — новый файл
+
+### Как запустить импорт на Railway
+```bash
+curl -X POST https://web-production-5d05b.up.railway.app/api/admin/import-historical
+```
+
+---
+
 _BRAIN.md v1.0 · KIKI Night Club Analytics_
 _Обновляй после каждого этапа_

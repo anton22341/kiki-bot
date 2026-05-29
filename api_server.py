@@ -97,6 +97,44 @@ async def api_live(request: web.Request) -> web.Response:
         denied        = sum(s.denied        for s in stats)
         hourly = [{"time": s.recorded_at.strftime("%H:%M"), "entered": s.girls_entered + s.boys_entered} for s in stats]
 
+        # Benchmark
+        from datetime import datetime as _dt
+        cur_hour = _dt.utcnow().hour
+        bm = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
+
+    def delta_pct(cur, avg):
+        if not avg:
+            return None
+        return round((cur / avg - 1) * 100)
+
+    def signal(d):
+        if d is None:
+            return None
+        if d > 15:
+            return "green"
+        if d < -15:
+            return "red"
+        return "orange"
+
+    bm_data = None
+    if bm:
+        d_inside = delta_pct(inside, bm["avg_inside"])
+        d_girls  = delta_pct(split["girls_inside"], bm["avg_girls"])
+        d_boys   = delta_pct(split["boys_inside"],  bm["avg_boys"])
+        bm_data  = {
+            "avg_inside":     bm["avg_inside"],
+            "avg_girls":      bm["avg_girls"],
+            "avg_boys":       bm["avg_boys"],
+            "delta_inside":   d_inside,
+            "delta_girls":    d_girls,
+            "delta_boys":     d_boys,
+            "signal_inside":  signal(d_inside),
+            "signal_girls":   signal(d_girls),
+            "signal_boys":    signal(d_boys),
+            "sample_count":   bm["sample_count"],
+            "day_of_week":    night.day_of_week,
+        }
+
     return web.json_response({
         "inside":        inside,
         "girls_entered": girls_entered,
@@ -108,6 +146,7 @@ async def api_live(request: web.Request) -> web.Response:
         "left":          left,
         "denied":        denied,
         "hourly":        hourly,
+        "benchmark":     bm_data,
     })
 
 
@@ -581,6 +620,70 @@ async def api_delete_stat(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+@require_superadmin
+async def api_import_historical(request: web.Request) -> web.Response:
+    """Одноразовый импорт исторических данных."""
+    try:
+        import sys, os
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from sqlalchemy import select
+        from models.db import ClubNight, HourlyStat
+        from datetime import datetime
+
+        EXCEL_DATE_MAP = {46157:"2026-05-15",46158:"2026-05-16",46164:"2026-05-22",46165:"2026-05-23"}
+        DAY_MAP = {"2026-05-15":"fri","2026-05-16":"sat","2026-05-22":"fri","2026-05-23":"sat"}
+        RAW = [
+            (46157,0,81,40,121,32,10,7,3),(46157,1,266,141,407,80,44,29,15),
+            (46157,2,365,225,590,113,140,93,47),(46157,3,415,257,672,150,234,156,78),
+            (46157,4,442,269,711,157,369,246,123),
+            (46158,0,70,39,109,54,5,3,2),(46158,1,216,100,316,104,24,16,8),
+            (46158,2,435,225,660,173,165,110,55),(46158,3,465,244,708,190,356,237,119),
+            (46158,4,480,250,730,193,437,291,146),
+            (46164,0,68,28,96,31,3,2,1),(46164,1,170,115,285,80,21,14,7),
+            (46164,2,270,147,417,103,57,38,19),(46164,3,311,173,484,118,113,75,38),
+            (46164,4,332,197,529,132,226,151,75),
+            (46165,0,58,45,103,37,8,5,3),(46165,1,160,138,298,78,34,23,11),
+            (46165,2,233,189,422,114,81,54,27),(46165,3,298,217,515,139,162,108,54),
+            (46165,4,326,232,558,157,261,174,87),
+        ]
+        nights_by_serial = {}
+        for row in RAW:
+            nights_by_serial.setdefault(row[0], []).append(row)
+
+        nights_created = stats_inserted = 0
+        async with AsyncSessionLocal() as session:
+            for serial, rows in sorted(nights_by_serial.items()):
+                date_str = EXCEL_DATE_MAP[serial]
+                dow = DAY_MAP[date_str]
+                res = await session.execute(select(ClubNight).where(ClubNight.date == date_str))
+                night = res.scalar_one_or_none()
+                if not night:
+                    night = ClubNight(date=date_str, day_of_week=dow,
+                        opened_at=datetime.strptime(date_str,"%Y-%m-%d").replace(hour=23),
+                        closed_at=datetime.strptime(date_str,"%Y-%m-%d").replace(hour=4,minute=59))
+                    session.add(night); await session.flush(); nights_created += 1
+
+                prev = (0,)*9
+                for row in rows:
+                    s,h,g,b,_,d,l,lg,lb = row
+                    _,_,pg,pb,_,pd,pl,plg,plb = prev
+                    rec = datetime.strptime(date_str,"%Y-%m-%d").replace(hour=h,minute=30)
+                    ex = await session.execute(select(HourlyStat).where(
+                        HourlyStat.night_id==night.id, HourlyStat.recorded_at==rec))
+                    if not ex.scalar_one_or_none():
+                        session.add(HourlyStat(
+                            night_id=night.id, recorded_at=rec, is_manual_time=False, is_historical=True,
+                            girls_entered=g-pg, boys_entered=b-pb, denied=d-pd,
+                            left_count=l-pl, girls_left=lg-plg, boys_left=lb-plb))
+                        stats_inserted += 1
+                    prev = row
+            await session.commit()
+        return web.json_response({"ok":True,"nights_created":nights_created,"stats_inserted":stats_inserted})
+    except Exception as e:
+        logger.error("import_historical: %s", e)
+        return web.json_response({"error": str(e)}, status=500)
+
+
 @require_auth
 async def api_get_settings(request: web.Request) -> web.Response:
     """Настройки клуба (цели)."""
@@ -647,6 +750,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/users/role", api_set_role)
     app.router.add_post("/api/users/remove", api_remove_user)
     app.router.add_get("/api/settings", api_get_settings)
+    app.router.add_post("/api/admin/import-historical", api_import_historical)
     app.router.add_post("/api/settings", api_save_settings)
     app.router.add_static("/miniapp", MINIAPP_DIR)
     return app

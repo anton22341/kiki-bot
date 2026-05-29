@@ -25,36 +25,62 @@ async def cmd_live(message: Message, role: str) -> None:
             await message.answer("🔴 Активной ночи нет. Данные ещё не введены.")
             return
 
+        import datetime as _dt
+        now = _dt.datetime.utcnow()
+        cur_hour = now.hour
+
         inside = await stats_service.get_live_occupancy(session, night.id)
+        split  = await stats_service.get_live_split(session, night.id)
         peak_time, peak_val = await stats_service.get_peak_hour(session, night.id)
         fc = await stats_service.get_fc_conversion(session, night.id)
-        ratio_g, ratio_b = await stats_service.get_ratio(session, night.id)
-        hist_avg = await stats_service.get_historical_avg(session, __import__("datetime").datetime.utcnow().hour, night.day_of_week)
-        dev = stats_service.calc_deviation(inside, hist_avg)
-        dev_str = f"+{dev:.0f}% 📈" if dev > 0 else f"{dev:.0f}% 📉" if dev < 0 else "—"
 
         stats = await stats_repo.get_night_stats(session, night.id)
-        total_girls = sum(s.girls_entered for s in stats)
-        total_boys = sum(s.boys_entered for s in stats)
-        total_left = sum(s.left_count for s in stats)
-        total_denied = sum(s.denied for s in stats)
+        total_girls  = sum(s.girls_entered for s in stats)
+        total_boys   = sum(s.boys_entered  for s in stats)
+        total_left   = sum(s.left_count    for s in stats)
+        total_denied = sum(s.denied        for s in stats)
 
+        bm = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
+
+    from bot.messages import progress_bar
     capacity = 200
-    bar = __import__("bot.messages", fromlist=["progress_bar"]).progress_bar(inside, capacity, 15)
+    bar = progress_bar(inside, capacity, 15)
     pct = round(inside / capacity * 100)
-    import datetime
-    now_str = datetime.datetime.utcnow().strftime("%H:%M")
+    now_str = now.strftime("%H:%M")
+
+    dow_ru = {"fri": "пятницам", "sat": "субботам", "sun": "воскресеньям",
+              "mon": "понедельникам", "tue": "вторникам", "wed": "средам", "thu": "четвергам"}
+
+    def fmt_delta(cur, avg):
+        if avg == 0:
+            return ""
+        d = round((cur / avg - 1) * 100)
+        sig = stats_service._signal(d)
+        em  = stats_service._emoji(sig)
+        return f"  {em} {'+' if d >= 0 else ''}{d}% vs avg"
+
+    inside_delta = fmt_delta(inside, bm["avg_inside"]) if bm else ""
+    girls_delta  = fmt_delta(split["girls_inside"], bm["avg_girls"]) if bm else ""
+    boys_delta   = fmt_delta(split["boys_inside"],  bm["avg_boys"])  if bm else ""
 
     text = (
         f"🟢 KIKI — Live сейчас\n\n"
-        f"👥 Внутри: {inside} чел\n"
+        f"👥 Внутри: {inside} чел{inside_delta}\n"
         f"📊 Загрузка: {bar} {pct}%\n\n"
-        f"👧 Девушки: {total_girls}  👦 Парни: {total_boys}\n"
-        f"🚪 Ушло: {total_left}    🚫 Отказано: {total_denied}\n\n"
+        f"👧 Девушки: {split['girls_inside']}{girls_delta}\n"
+        f"👦 Парни: {split['boys_inside']}{boys_delta}\n"
+        f"🚫 Отказано: {total_denied}\n\n"
         f"🔥 Пик: {peak_time} — {peak_val} чел\n"
-        f"📈 vs история {night.day_of_week}: {dev_str}\n"
-        f"🕐 Обновлено: {now_str}"
+        f"🎯 FC конверсия: {fc}%\n"
     )
+    if bm:
+        text += (
+            f"\n📊 Ср по {dow_ru.get(night.day_of_week, night.day_of_week)} в {cur_hour:02d}:00:\n"
+            f"   Внутри: ~{bm['avg_inside']:.0f}  "
+            f"Девушки: ~{bm['avg_girls']:.0f}  Парни: ~{bm['avg_boys']:.0f}\n"
+            f"   (выборка: {bm['sample_count']} ночей)\n"
+        )
+    text += f"🕐 Обновлено: {now_str}"
     await message.answer(text)
 
 

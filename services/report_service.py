@@ -60,12 +60,31 @@ async def build_night_report(session: AsyncSession, night_id: int) -> str:
     lines.append("\nПочасовой трафик:")
 
     max_val = max(s.girls_entered + s.boys_entered for s in stats)
+    from services.stats_service import get_benchmark, _emoji
     for s in stats:
         entered = s.girls_entered + s.boys_entered
         bar = progress_bar(entered, max_val, 8)
-        dev = await get_historical_avg(session, s.recorded_at.hour, night.day_of_week)
-        dev_str = f" ({calc_deviation(entered, dev):+.0f}%)" if dev > 0 else " (сейчас)" if not night.closed_at else ""
-        lines.append(f"{s.recorded_at.strftime('%H:%M')}  {bar} {entered}{dev_str}")
+        bm = await get_benchmark(session, night.id, s.recorded_at.hour, night.day_of_week)
+        if bm and bm["avg_inside"] > 0:
+            inside_cum = 0
+            for prev in stats:
+                if prev.recorded_at <= s.recorded_at:
+                    inside_cum += prev.girls_entered + prev.boys_entered - prev.left_count
+            inside_cum = max(0, inside_cum)
+            d = round((inside_cum / bm["avg_inside"] - 1) * 100)
+            delta_str = f" {_emoji('green' if d > 15 else 'red' if d < -15 else 'orange')}{'+' if d >= 0 else ''}{d}%"
+        else:
+            delta_str = " (сейчас)" if not night.closed_at and s == stats[-1] else ""
+        lines.append(f"{s.recorded_at.strftime('%H:%M')}  {bar} {entered}{delta_str}")
+
+    # Benchmark итог за ночь
+    bm_night = await get_benchmark(session, night.id, stats[0].recorded_at.hour, night.day_of_week)
+    if bm_night:
+        night_avg_entered = bm_night["avg_inside"] * len(stats) if bm_night else 0
+        if night_avg_entered > 0:
+            d_night = round((total_entered / night_avg_entered - 1) * 100)
+            em = _emoji("green" if d_night > 15 else "red" if d_night < -15 else "orange")
+            lines.append(f"\n{em} vs исторический avg ({night.day_of_week}): {'+' if d_night >= 0 else ''}{d_night}%")
 
     return "\n".join(lines)
 

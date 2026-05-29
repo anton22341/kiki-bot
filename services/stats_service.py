@@ -67,6 +67,76 @@ async def get_fc_conversion(session: AsyncSession, night_id: int) -> float:
     return round(total / (total + denied) * 100, 1)
 
 
+BENCHMARK_GREEN = 15   # % выше среднего → зелёный
+BENCHMARK_RED   = -15  # % ниже среднего → красный
+
+
+def _signal(delta: float) -> str:
+    if delta > BENCHMARK_GREEN:
+        return "green"
+    if delta < BENCHMARK_RED:
+        return "red"
+    return "orange"
+
+
+def _emoji(signal: str) -> str:
+    return {"green": "🟢", "orange": "🟠", "red": "🔴"}.get(signal, "🟠")
+
+
+async def get_benchmark(session: AsyncSession, night_id: int, hour: int, day_of_week: str) -> dict | None:
+    """
+    Считает benchmark на основе всех записей в БД за тот же день недели и час,
+    кроме текущей ночи. Возвращает None если данных < 2 ночей.
+    """
+    from sqlalchemy import select, func
+    from models.db import HourlyStat, ClubNight
+
+    # Берём все записи за нужный день недели и час (кроме текущей ночи)
+    result = await session.execute(
+        select(HourlyStat, ClubNight)
+        .join(ClubNight, HourlyStat.night_id == ClubNight.id)
+        .where(
+            ClubNight.day_of_week == day_of_week,
+            ClubNight.id != night_id,
+        )
+    )
+    rows = result.all()
+
+    # Фильтруем по часу
+    hist = [(s, n) for s, n in rows if s.recorded_at.hour == hour]
+    if len(hist) < 2:
+        return None
+
+    # Считаем средние по часовым записям
+    avg_girls  = sum(s.girls_entered for s, _ in hist) / len(hist)
+    avg_boys   = sum(s.boys_entered  for s, _ in hist) / len(hist)
+    avg_denied = sum(s.denied        for s, _ in hist) / len(hist)
+
+    # Накопленный inside на этот час (по ночам)
+    night_ids = list({n.id for _, n in hist})
+    inside_per_night = []
+    for nid in night_ids:
+        night_stats_res = await session.execute(
+            select(HourlyStat)
+            .join(ClubNight, HourlyStat.night_id == ClubNight.id)
+            .where(HourlyStat.night_id == nid)
+            .where(HourlyStat.recorded_at <= next(s.recorded_at for s, n in hist if n.id == nid))
+            .order_by(HourlyStat.recorded_at)
+        )
+        night_stats = night_stats_res.scalars().all()
+        inside = max(0, sum(s.girls_entered + s.boys_entered - s.left_count for s in night_stats))
+        inside_per_night.append(inside)
+    avg_inside = sum(inside_per_night) / len(inside_per_night) if inside_per_night else 0
+
+    return {
+        "avg_girls":     round(avg_girls, 1),
+        "avg_boys":      round(avg_boys, 1),
+        "avg_inside":    round(avg_inside, 1),
+        "avg_denied":    round(avg_denied, 1),
+        "sample_count":  len(hist),
+    }
+
+
 async def get_ratio(session: AsyncSession, night_id: int) -> tuple[float, float]:
     stats = await stats_repo.get_night_stats(session, night_id)
     girls = sum(s.girls_entered for s in stats)

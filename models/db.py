@@ -46,6 +46,7 @@ class HourlyStat(Base):
     left_count     = Column(Integer, default=0)  # итого ушло (girls_left + boys_left)
     girls_left     = Column(Integer, default=0)  # ушло девушек
     boys_left      = Column(Integer, default=0)  # ушло парней
+    is_historical  = Column(Boolean, default=False)  # импортировано из xlsx
     created_by     = Column(Integer, ForeignKey("users.id"))
     created_at     = Column(DateTime, default=datetime.utcnow)
     night          = relationship("ClubNight", back_populates="hourly_stats")
@@ -128,6 +129,14 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Миграция: добавляем is_historical если нет
+        try:
+            await conn.execute(__import__("sqlalchemy").text(
+                "ALTER TABLE hourly_stats ADD COLUMN is_historical BOOLEAN DEFAULT FALSE"
+            ))
+            logger.info("Migration: added is_historical column")
+        except Exception:
+            pass  # Колонка уже существует
 
     from sqlalchemy import select
     # Superadmin

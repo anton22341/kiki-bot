@@ -488,6 +488,7 @@
           <div class="occ-fill" id="live-bar" style="width:0%"></div>
         </div>
         <div style="font-size:13px;color:var(--w30);margin-top:4px;" id="live-pct">загрузка зала</div>
+        <div style="font-size:12px;margin-top:2px;" id="live-bm-inside"></div>
       </div>
 
       <!-- 4 карточки + doughnut рядом -->
@@ -498,11 +499,13 @@
               <div class="lbl">👧 Внутри</div>
               <div class="val" id="live-girls-in">—</div>
               <div class="sub">вошло: <span id="live-girls-entered">—</span></div>
+              <div style="font-size:11px;margin-top:2px;" id="live-bm-girls"></div>
             </div>
             <div class="stat-card">
               <div class="lbl">👦 Внутри</div>
               <div class="val" id="live-boys-in">—</div>
               <div class="sub">вошло: <span id="live-boys-entered">—</span></div>
+              <div style="font-size:11px;margin-top:2px;" id="live-bm-boys"></div>
             </div>
             <div class="stat-card"><div class="lbl">🚪 Ушло всего</div><div class="val" id="live-left">—</div></div>
             <div class="stat-card"><div class="lbl">🚫 Отказано</div><div class="val" id="live-denied">—</div></div>
@@ -1053,6 +1056,21 @@ async function loadLive() {
     const occColor  = pct >= occGreen ? '#4CAF50' : pct >= occOrange ? '#FF6B00' : '#F44336';
     const pctEl = document.getElementById('live-pct');
     pctEl.innerHTML = `<span style="color:${occColor};font-weight:700;font-size:16px;">${pct}%</span> заполнение (макс ${cap} чел)`;
+
+    // Benchmark
+    const SIG_COLOR = { green: '#34C759', orange: '#FF9500', red: '#FF3B30' };
+    const SIG_EMOJI = { green: '🟢', orange: '🟠', red: '🔴' };
+    function fmtBm(delta, signal, avg, label) {
+      if (delta === null || delta === undefined) return '';
+      const c = SIG_COLOR[signal] || '#FF9500';
+      const e = SIG_EMOJI[signal] || '🟠';
+      const sign = delta >= 0 ? '+' : '';
+      return `<span style="color:${c}">${e} ${sign}${delta}% avg ~${Math.round(avg)}</span>`;
+    }
+    const bm = d.benchmark;
+    document.getElementById('live-bm-inside').innerHTML = bm ? fmtBm(bm.delta_inside, bm.signal_inside, bm.avg_inside) : '';
+    document.getElementById('live-bm-girls').innerHTML  = bm ? fmtBm(bm.delta_girls,  bm.signal_girls,  bm.avg_girls)  : '';
+    document.getElementById('live-bm-boys').innerHTML   = bm ? fmtBm(bm.delta_boys,   bm.signal_boys,   bm.avg_boys)   : '';
 
     // Doughnut — кто сейчас ВНУТРИ (не вошло за всё время)
     mkDoughnut('live-ratio-chart', d.girls_inside||0, d.boys_inside||0, 'live-ratio-pct', 'live-ratio-abs');
