@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "kiki-miniapp",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["/Users/antonskripko/Desktop/my_projects/kiki_bot/main.py"],
+      "port": 8080
+    }
+  ]
+}

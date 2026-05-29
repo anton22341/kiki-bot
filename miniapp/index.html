@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>KIKI Analytics</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --orange:      #FF6B00;
+      --orange-d:    rgba(255,107,0,0.20);
+      --orange-g:    rgba(255,107,0,0.08);
+      --black:       #0A0A0A;
+      --s1:          #111111;
+      --s2:          #1A1A1A;
+      --border:      rgba(255,255,255,0.09);
+      --w60:         rgba(255,255,255,0.60);
+      --w30:         rgba(255,255,255,0.30);
+      --w10:         rgba(255,255,255,0.10);
+      --success:     #34C759;
+      --danger:      #FF3B30;
+      --warning:     #FF9500;
+      --nav-h:       56px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      background: var(--black);
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+      font-size: 15px;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #app { display: flex; flex-direction: column; height: 100dvh; }
+
+    /* ── Header ── */
+    .app-header {
+      background: rgba(255,107,0,0.08);
+      backdrop-filter: blur(30px) saturate(200%);
+      -webkit-backdrop-filter: blur(30px) saturate(200%);
+      border-bottom: 0.5px solid rgba(255,107,0,0.20);
+      padding: 10px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .app-header h1 { font-size: 17px; font-weight: 500; letter-spacing: -0.3px; }
+    .header-badge {
+      background: var(--orange-d);
+      border: 0.5px solid rgba(255,107,0,0.4);
+      border-radius: 99px;
+      color: var(--orange);
+      font-size: 11px; padding: 3px 10px;
+    }
+
+    /* ── Screens ── */
+    #screens {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 14px 14px calc(var(--nav-h) + env(safe-area-inset-bottom) + 8px);
+    }
+    .screen { display: none; animation: fadeIn 0.15s ease; }
+    .screen.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    /* ── Navbar ── */
+    .nav-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: calc(var(--nav-h) + env(safe-area-inset-bottom));
+      background: rgba(10,10,10,0.85);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-top: 0.5px solid rgba(255,255,255,0.10);
+      display: flex; align-items: flex-start;
+      padding-bottom: env(safe-area-inset-bottom);
+      z-index: 90;
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      gap: 2px; padding: 10px 4px 0;
+      border: none; background: none; color: var(--w30);
+      font-size: 10px; cursor: pointer; transition: color 0.2s;
+    }
+    .nav-item.active { color: var(--orange); }
+    .nav-emoji { font-size: 20px; line-height: 1; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--s1);
+      border: 0.5px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    .card-title {
+      font-size: 11px; color: var(--w30);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+
+    /* ── Grid 2×2 ── */
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .stat-card {
+      background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 12px; padding: 12px;
+    }
+    .stat-card .lbl { font-size: 11px; color: var(--w30); margin-bottom: 3px; }
+    .stat-card .val {
+      font-size: 26px; font-weight: 500;
+      letter-spacing: -0.3px; font-variant-numeric: tabular-nums;
+    }
+    .stat-card .sub { font-size: 11px; color: var(--w30); margin-top: 2px; }
+
+    /* ── Input screen ── */
+    .time-block {
+      background: var(--s1); border: 0.5px solid var(--border);
+      border-radius: 16px; padding: 14px 16px; margin-bottom: 10px;
+    }
+    .time-row { display: flex; align-items: center; justify-content: space-between; }
+    .time-display {
+      font-size: 36px; font-weight: 500;
+      font-variant-numeric: tabular-nums; letter-spacing: -0.3px;
+    }
+    .time-badge {
+      font-size: 11px; padding: 3px 10px; border-radius: 99px;
+      background: var(--orange-d); border: 0.5px solid rgba(255,107,0,0.4); color: var(--orange);
+    }
+    .time-badge.manual { background: rgba(255,149,0,0.15); border-color: rgba(255,149,0,0.4); color: var(--warning); }
+    .time-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .btn-sm {
+      background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 8px; color: var(--w60);
+      font-size: 13px; padding: 6px 14px; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-sm:active { transform: scale(0.97); }
+    #timeInput {
+      display: none; margin-top: 10px; width: 100%;
+      background: var(--s2); border: 1px solid var(--orange);
+      border-radius: 8px; color: #fff;
+      font-size: 17px; padding: 8px 12px;
+    }
+
+    .inp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .inp-cell {
+      background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 12px; padding: 12px;
+      display: flex; flex-direction: column; align-items: center;
+      transition: border-color 0.2s;
+    }
+    .inp-cell:focus-within { border-color: var(--orange); }
+    .inp-cell input {
+      background: none; border: none; outline: none;
+      color: #fff; font-size: 28px; font-weight: 500;
+      text-align: center; width: 100%;
+      font-variant-numeric: tabular-nums;
+    }
+    .inp-cell .lbl { font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 3px; }
+
+    /* preview */
+    .prev-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 0.5px solid var(--border); font-size: 13px; }
+    .prev-row:last-child { border-bottom: none; }
+    .prev-lbl { color: var(--w60); }
+    .prev-val { font-variant-numeric: tabular-nums; font-weight: 500; }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      width: 100%; background: var(--orange); border: none;
+      border-radius: 10px; color: #fff;
+      font-size: 15px; font-weight: 500;
+      padding: 14px; cursor: pointer;
+      transition: all 0.2s; margin-top: 4px;
+    }
+    .btn-primary:active { transform: scale(0.97); background: #FF8C00; }
+
+    /* ── Progress bar ── */
+    .occ-track { height: 8px; border-radius: 99px; background: var(--s2); overflow: hidden; margin: 8px 0; }
+    .occ-fill { height: 100%; border-radius: 99px; background: var(--orange); transition: width 0.4s; }
+
+    /* ── Chart ── */
+    .chart-wrap { position: relative; height: 160px; }
+
+    /* ── Description pill ── */
+    .desc-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 99px; padding: 4px 12px;
+      font-size: 12px; color: var(--w60); margin-bottom: 10px;
+    }
+
+    /* ── Subtabs ── */
+    .subtabs { display: flex; gap: 6px; margin-bottom: 12px; }
+    .subtab {
+      background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 99px; color: var(--w30);
+      font-size: 13px; padding: 6px 16px; cursor: pointer; transition: all 0.2s;
+    }
+    .subtab.active { background: var(--orange-d); border-color: rgba(255,107,0,0.4); color: var(--orange); }
+    .subscreen { display: none; }
+    .subscreen.active { display: block; }
+
+    /* ── Team ── */
+    .field-input {
+      width: 100%; background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 8px; color: #fff; font-size: 15px;
+      padding: 11px 12px; outline: none; margin-bottom: 10px;
+    }
+    .field-input:focus { border-color: var(--orange); }
+    .role-toggle { display: flex; gap: 8px; margin-bottom: 10px; }
+    .role-btn {
+      flex: 1; background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 8px; color: var(--w60); font-size: 14px;
+      padding: 10px; cursor: pointer; transition: all 0.2s;
+    }
+    .role-btn.active { background: var(--orange-d); border-color: rgba(255,107,0,0.4); color: var(--orange); }
+
+    .section-label { font-size: 11px; color: var(--w30); text-transform: uppercase; letter-spacing: 0.5px; margin: 14px 0 8px; }
+
+    .user-card {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 12px; padding: 11px 12px; margin-bottom: 8px;
+    }
+    .avatar {
+      width: 36px; height: 36px; border-radius: 99px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 500; flex-shrink: 0;
+    }
+    .av-sa     { background: var(--orange); color: #fff; }
+    .av-owner  { background: var(--orange-d); border: 1px solid rgba(255,107,0,0.4); color: var(--orange); }
+    .av-admin  { background: rgba(255,255,255,0.08); color: var(--w60); }
+    .av-pending{ background: transparent; border: 1px dashed rgba(255,255,255,0.25); color: var(--w30); }
+
+    .user-info { flex: 1; min-width: 0; }
+    .user-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-meta { font-size: 11px; color: var(--w30); margin-top: 1px; }
+    .user-role-badge {
+      font-size: 10px; padding: 2px 8px; border-radius: 99px;
+      border: 0.5px solid var(--border); color: var(--w30);
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .user-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .icon-btn {
+      background: none; border: none; color: var(--w30);
+      font-size: 16px; cursor: pointer; padding: 4px 6px;
+      transition: color 0.2s; border-radius: 6px;
+    }
+    .icon-btn:active { background: var(--w10); }
+    .icon-btn.ok  { color: var(--success); }
+    .icon-btn.del { color: var(--danger); }
+    .icon-btn.up  { color: var(--orange); }
+
+    /* ── Bottom sheet ── */
+    .overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+      display: none; z-index: 150; align-items: flex-end;
+    }
+    .overlay.show { display: flex; }
+    .bottom-sheet {
+      width: 100%; background: var(--s1);
+      border: 0.5px solid var(--border);
+      border-radius: 20px 20px 0 0;
+      padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+      animation: slideUp 0.25s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .sheet-handle { width: 36px; height: 4px; background: var(--border); border-radius: 99px; margin: 0 auto 16px; }
+    .sheet-title { font-size: 17px; font-weight: 500; margin-bottom: 6px; }
+    .sheet-text { font-size: 13px; color: var(--w60); margin-bottom: 20px; }
+    .sheet-actions { display: flex; gap: 10px; }
+    .btn-cancel {
+      flex: 1; background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 10px; color: var(--w60); font-size: 15px; padding: 13px; cursor: pointer;
+    }
+    .btn-danger {
+      flex: 1; background: rgba(255,59,48,0.15); border: 0.5px solid rgba(255,59,48,0.3);
+      border-radius: 10px; color: var(--danger); font-size: 15px; padding: 13px; cursor: pointer;
+    }
+
+    /* ── Date info bar ── */
+    .date-info-bar {
+      font-size: 12px; color: var(--w30);
+      text-align: center; margin-bottom: 10px;
+      padding: 6px 12px; background: var(--s2);
+      border-radius: 99px; display: inline-block;
+      width: 100%; box-sizing: border-box;
+    }
+
+    /* ── Навигация по датам ── */
+    .date-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--s1); border: 0.5px solid var(--border);
+      border-radius: 14px; padding: 10px 8px; margin-bottom: 12px;
+    }
+    .date-arrow {
+      background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 8px; color: var(--w60);
+      font-size: 22px; line-height: 1;
+      width: 40px; height: 40px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .date-arrow:active { background: var(--orange-d); color: var(--orange); }
+    .date-arrow:disabled { opacity: 0.25; pointer-events: none; }
+    .date-center { text-align: center; flex: 1; }
+    .date-label { font-size: 17px; font-weight: 500; letter-spacing: -0.3px; }
+    .date-sub { font-size: 11px; color: var(--w30); margin-top: 2px; }
+
+    /* ── История ввода ── */
+    .history-section { margin-top: 14px; }
+    .history-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .history-title { font-size: 13px; color: var(--w60); font-weight: 500; }
+    .history-entry {
+      background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 12px; padding: 11px 12px; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .entry-time {
+      font-size: 18px; font-weight: 500;
+      font-variant-numeric: tabular-nums; letter-spacing: -0.3px;
+      color: var(--orange); min-width: 44px;
+    }
+    .entry-data { flex: 1; }
+    .entry-row { font-size: 13px; color: var(--w60); line-height: 1.6; }
+    .entry-row span { color: #fff; font-weight: 500; margin-right: 8px; }
+    .entry-manual { font-size: 10px; color: var(--warning); margin-top: 2px; }
+    .entry-actions { display: flex; gap: 4px; }
+
+    /* ── Edit stat sheet ── */
+    .edit-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .edit-field { display: flex; flex-direction: column; gap: 4px; }
+    .edit-label { font-size: 11px; color: var(--w30); }
+    .edit-input {
+      background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 8px; color: #fff; font-size: 20px; font-weight: 500;
+      text-align: center; padding: 10px 8px; outline: none; width: 100%;
+      font-variant-numeric: tabular-nums;
+    }
+    .edit-input:focus { border-color: var(--orange); }
+    .edit-time-input {
+      background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 8px; color: #fff; font-size: 17px;
+      padding: 10px 12px; outline: none; width: 100%;
+    }
+    .edit-time-input:focus { border-color: var(--orange); }
+    .btn-save {
+      flex: 1; background: var(--orange); border: none;
+      border-radius: 10px; color: #fff; font-size: 15px; padding: 13px; cursor: pointer;
+    }
+
+    /* ── Edit role sheet ── */
+    #editSheet { display: none; }
+    #editSheet.show { display: flex; }
+    .edit-role-btns { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .edit-role-opt {
+      background: var(--s2); border: 0.5px solid var(--border);
+      border-radius: 10px; color: #fff; font-size: 15px;
+      padding: 13px 16px; cursor: pointer; text-align: left;
+      transition: all 0.2s;
+    }
+    .edit-role-opt:active { background: var(--orange-d); border-color: rgba(255,107,0,0.4); }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+      left: 14px; right: 14px;
+      background: rgba(20,20,20,0.92);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 0.5px solid rgba(255,255,255,0.15);
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-size: 14px;
+      transform: translateY(calc(100% + 100px));
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      z-index: 200;
+    }
+    #toast.show { transform: translateY(0); }
+
+    /* ── Misc ── */
+    .big-num {
+      font-size: 52px; font-weight: 500;
+      letter-spacing: -0.3px; font-variant-numeric: tabular-nums; line-height: 1;
+    }
+    .empty-state { text-align: center; color: var(--w30); padding: 32px 16px; font-size: 14px; line-height: 1.6; }
+    .diff-pos { color: var(--success); }
+    .diff-neg { color: var(--danger); }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header class="app-header">
+    <h1>🎶 KIKI</h1>
+    <span class="header-badge" id="headerBadge">Analytics</span>
+  </header>
+
+  <main id="screens">
+
+    <!-- ═══ ВВОД ═══ -->
+    <section id="screen-input" class="screen active">
+      <div class="time-block">
+        <div class="time-row">
+          <div class="time-display" id="timeDisplay">--:--</div>
+          <span class="time-badge" id="timeBadge">авто</span>
+        </div>
+        <div class="time-actions">
+          <button class="btn-sm" onclick="toggleTimeEdit()">Изменить</button>
+          <button class="btn-sm" onclick="resetTime()">Сбросить</button>
+        </div>
+        <input type="time" id="timeInput" onchange="onTimeChange(this.value)">
+      </div>
+
+      <!-- Вошло -->
+      <div style="font-size:11px;color:var(--w30);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Вошло за час</div>
+      <div class="inp-grid" style="margin-bottom:10px;">
+        <div class="inp-cell">
+          <input type="number" inputmode="numeric" id="inp-girls" placeholder="0" min="0" oninput="updatePreview()">
+          <div class="lbl">👧 Девушки</div>
+        </div>
+        <div class="inp-cell">
+          <input type="number" inputmode="numeric" id="inp-boys" placeholder="0" min="0" oninput="updatePreview()">
+          <div class="lbl">👦 Парни</div>
+        </div>
+      </div>
+
+      <!-- Ушло (раздельно) -->
+      <div style="font-size:11px;color:var(--w30);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Ушло за час</div>
+      <div class="inp-grid" style="margin-bottom:10px;">
+        <div class="inp-cell">
+          <input type="number" inputmode="numeric" id="inp-girls-left" placeholder="0" min="0" oninput="updatePreview()">
+          <div class="lbl">👧 Девушки</div>
+        </div>
+        <div class="inp-cell">
+          <input type="number" inputmode="numeric" id="inp-boys-left" placeholder="0" min="0" oninput="updatePreview()">
+          <div class="lbl">👦 Парни</div>
+        </div>
+      </div>
+
+      <!-- Отказано -->
+      <div class="inp-grid" style="grid-template-columns:1fr;margin-bottom:10px;">
+        <div class="inp-cell" style="flex-direction:row;align-items:center;justify-content:space-between;padding:10px 14px;">
+          <div class="lbl" style="font-size:14px;">🚫 Отказано на входе</div>
+          <input type="number" inputmode="numeric" id="inp-denied" placeholder="0" min="0" oninput="updatePreview()"
+                 style="width:70px;text-align:center;font-size:22px;font-weight:500;background:none;border:none;outline:none;color:#fff;font-variant-numeric:tabular-nums;">
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Предпросмотр</div>
+        <div class="prev-row"><span class="prev-lbl">Внутри сейчас</span><span class="prev-val" id="prev-inside">—</span></div>
+        <div class="prev-row"><span class="prev-lbl">👧 Девушек внутри</span><span class="prev-val" id="prev-girls-in">—</span></div>
+        <div class="prev-row"><span class="prev-lbl">👦 Парней внутри</span><span class="prev-val" id="prev-boys-in">—</span></div>
+        <div class="prev-row"><span class="prev-lbl">Соотношение Ж/М</span><span class="prev-val" id="prev-ratio">—</span></div>
+        <div class="prev-row"><span class="prev-lbl">FC конверсия</span><span class="prev-val" id="prev-fc">—</span></div>
+      </div>
+
+      <button class="btn-primary" onclick="submitData()">Сохранить</button>
+
+      <div class="history-section">
+        <div class="history-header">
+          <span class="history-title">📋 История ввода сегодня</span>
+          <button class="btn-sm" onclick="loadHistory()" style="font-size:11px;padding:4px 10px;">Обновить</button>
+        </div>
+        <div id="historyList"><div style="text-align:center;color:var(--w30);font-size:13px;padding:16px">Загрузка...</div></div>
+      </div>
+    </section>
+
+    <!-- ═══ LIVE ═══ -->
+    <section id="screen-live" class="screen">
+      <div class="desc-pill">🟢 <span>Текущая ночь — реальное время</span></div>
+
+      <!-- Hero: внутри + прогресс -->
+      <div class="card" style="text-align:center; padding: 20px 16px;">
+        <div class="card-title">Внутри прямо сейчас</div>
+        <div class="big-num" id="live-inside">—</div>
+        <div class="occ-track" style="margin-top:12px;">
+          <div class="occ-fill" id="live-bar" style="width:0%"></div>
+        </div>
+        <div style="font-size:13px;color:var(--w30);margin-top:4px;" id="live-pct">загрузка зала</div>
+      </div>
+
+      <!-- 4 карточки + doughnut рядом -->
+      <div style="display:flex;gap:10px;margin-bottom:10px;">
+        <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+          <div class="grid2" style="margin-bottom:0;">
+            <div class="stat-card">
+              <div class="lbl">👧 Внутри</div>
+              <div class="val" id="live-girls-in">—</div>
+              <div class="sub">вошло: <span id="live-girls-entered">—</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="lbl">👦 Внутри</div>
+              <div class="val" id="live-boys-in">—</div>
+              <div class="sub">вошло: <span id="live-boys-entered">—</span></div>
+            </div>
+            <div class="stat-card"><div class="lbl">🚪 Ушло всего</div><div class="val" id="live-left">—</div></div>
+            <div class="stat-card"><div class="lbl">🚫 Отказано</div><div class="val" id="live-denied">—</div></div>
+          </div>
+        </div>
+        <!-- Doughnut Ж/М -->
+        <div class="card" style="width:130px;flex-shrink:0;margin-bottom:0;padding:12px 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+          <div class="card-title" style="margin-bottom:6px;">Ж / М</div>
+          <div style="position:relative;width:90px;height:90px;">
+            <canvas id="live-ratio-chart"></canvas>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;pointer-events:none;">
+              <div style="font-size:16px;font-weight:500;font-variant-numeric:tabular-nums;" id="live-ratio-pct">—</div>
+              <div style="font-size:9px;color:var(--w30);">девушек</div>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--w30);margin-top:6px;text-align:center;" id="live-ratio-abs">— / —</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Почасовой поток сегодня</div>
+        <div class="chart-wrap"><canvas id="live-chart"></canvas></div>
+      </div>
+
+      <div id="live-empty" class="empty-state" style="display:none">
+        Нет данных за текущую ночь.<br>Admin вводит данные каждый час.
+      </div>
+    </section>
+
+    <!-- ═══ НОЧЬ ═══ -->
+    <section id="screen-night" class="screen">
+      <!-- Навигация по датам -->
+      <div class="date-nav">
+        <button class="date-arrow" id="nightPrev" onclick="shiftNight(-1)">‹</button>
+        <div class="date-center">
+          <div class="date-label" id="nightDateLabel">—</div>
+          <div class="date-sub" id="nightDateSub"></div>
+        </div>
+        <button class="date-arrow" id="nightNext" onclick="shiftNight(+1)">›</button>
+      </div>
+
+      <div class="grid2">
+        <div class="stat-card"><div class="lbl">Всего вошло</div><div class="val" id="night-total">—</div></div>
+        <div class="stat-card"><div class="lbl">🔥 Пик</div><div class="val" id="night-peak">—</div><div class="sub" id="night-peak-t"></div></div>
+        <div class="stat-card">
+          <div class="lbl">🎯 FC конверсия</div>
+          <div class="val" id="night-fc">—</div>
+          <div class="sub">вошли / (вошли + отказано)</div>
+        </div>
+        <div class="stat-card"><div class="lbl">⚖️ Ж / М</div><div class="val" id="night-ratio">—</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Вошло vs Ушло по часам</div>
+        <div class="chart-wrap"><canvas id="night-chart"></canvas></div>
+      </div>
+
+      <!-- doughnut Ж/М -->
+      <div style="display:flex;gap:10px;margin-bottom:10px;">
+        <div class="card" style="flex:1;margin-bottom:0">
+          <div class="card-title">Соотношение Ж/М</div>
+          <div style="position:relative;height:160px;display:flex;align-items:center;justify-content:center;">
+            <canvas id="ratio-chart"></canvas>
+            <div id="ratio-center" style="position:absolute;text-align:center;pointer-events:none;">
+              <div style="font-size:22px;font-weight:500;font-variant-numeric:tabular-nums;" id="ratio-pct-g">—</div>
+              <div style="font-size:11px;color:var(--w30);">девушек</div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:center;gap:16px;margin-top:8px;font-size:12px;color:var(--w60);">
+            <span><span style="color:#FF6B00">●</span> Девушки <span id="ratio-g-abs" style="color:#fff;font-weight:500">—</span></span>
+            <span><span style="color:rgba(255,255,255,0.3)">●</span> Парни <span id="ratio-b-abs" style="color:#fff;font-weight:500">—</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div id="night-empty" class="empty-state" style="display:none">
+        За эту ночь данных нет.
+      </div>
+    </section>
+
+    <!-- ═══ СТАТИСТИКА ═══ -->
+    <section id="screen-week" class="screen">
+      <div class="subtabs">
+        <button class="subtab active" onclick="switchSubtab('week')">Ночи</button>
+        <button class="subtab" onclick="switchSubtab('month')">Месяц</button>
+        <button class="subtab" onclick="switchSubtab('kpi')">KPI</button>
+        <button class="subtab" onclick="switchSubtab('goals')">Цели</button>
+      </div>
+
+      <!-- Ночи (последние Пт/Сб) -->
+      <div id="sub-week" class="subscreen active">
+        <div class="date-info-bar" id="week-date-bar"></div>
+        <div class="card">
+          <div class="card-title" id="week-chart-title">Последние ночи (Пт/Сб)</div>
+          <div class="chart-wrap"><canvas id="week-chart"></canvas></div>
+        </div>
+        <div id="week-stats-grid" class="grid2" style="margin-bottom:0;"></div>
+        <div id="week-empty" class="empty-state" style="display:none">Нет данных за последние ночи.</div>
+      </div>
+
+      <!-- Месяц -->
+      <div id="sub-month" class="subscreen">
+        <div class="date-info-bar" id="month-date-bar"></div>
+        <div class="card">
+          <div class="card-title" id="month-chart-title">Месяц</div>
+          <div class="chart-wrap"><canvas id="month-chart"></canvas></div>
+        </div>
+        <div id="month-empty" class="empty-state" style="display:none">Нет данных за этот месяц.</div>
+      </div>
+
+      <!-- KPI -->
+      <div id="sub-kpi" class="subscreen">
+        <div class="date-info-bar" id="kpi-date-bar"></div>
+        <!-- Объяснение KPI -->
+        <div class="card" style="margin-bottom:10px;padding:12px 14px;">
+          <div style="font-size:13px;color:var(--w60);line-height:1.7;">
+            <div>🎯 <b style="color:#fff;">FC конверсия</b> — % гостей кто прошёл внутрь из всех кто подошёл к входу.<br>
+            Формула: вошли ÷ (вошли + отказано) × 100%</div>
+            <div style="margin-top:6px;">⚖️ <b style="color:#fff;">Соотношение Ж/М</b> — % девушек от общего числа вошедших.</div>
+          </div>
+        </div>
+        <div class="grid2" style="margin-bottom:10px;">
+          <div class="stat-card">
+            <div class="lbl">🎯 FC конверсия</div>
+            <div class="val" id="kpi-fc">—</div>
+            <div class="sub">цель: <span id="kpi-fc-target">90</span>%</div>
+          </div>
+          <div class="stat-card">
+            <div class="lbl">⚖️ Девушки</div>
+            <div class="val" id="kpi-ratio">—</div>
+            <div class="sub">цель: <span id="kpi-ratio-target">55</span>%</div>
+          </div>
+          <div class="stat-card">
+            <div class="lbl">👥 Avg вместимость</div>
+            <div class="val" id="kpi-avg">—</div>
+            <div class="sub">макс: <span id="kpi-capacity">200</span> чел</div>
+          </div>
+          <div class="stat-card">
+            <div class="lbl">🌙 Ночей</div>
+            <div class="val" id="kpi-nights">—</div>
+            <div class="sub">за месяц</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Факт vs Цель</div>
+          <div class="chart-wrap" style="height:120px;"><canvas id="kpi-chart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Цели (настройки) — только superadmin -->
+      <div id="sub-goals" class="subscreen">
+        <div class="card">
+          <div class="card-title">⚙️ Настройки клуба</div>
+          <div style="font-size:12px;color:var(--w30);margin-bottom:14px;">
+            Эти значения используются для расчёта KPI и прогресс-баров
+          </div>
+
+          <div class="edit-field" style="margin-bottom:12px;">
+            <div class="edit-label">🏠 Название клуба</div>
+            <input class="field-input" id="set-club-name" type="text" placeholder="KIKI" style="margin-bottom:0;">
+          </div>
+          <div class="edit-stat-grid">
+            <div class="edit-field">
+              <div class="edit-label">👥 Макс. вместимость</div>
+              <input class="edit-input" id="set-capacity" type="number" inputmode="numeric" min="1" placeholder="200">
+            </div>
+            <div class="edit-field">
+              <div class="edit-label">⚖️ Цель % девушек</div>
+              <input class="edit-input" id="set-girls-pct" type="number" inputmode="numeric" min="1" max="100" placeholder="55">
+            </div>
+            <div class="edit-field">
+              <div class="edit-label">🎯 Цель FC %</div>
+              <input class="edit-input" id="set-fc-pct" type="number" inputmode="numeric" min="1" max="100" placeholder="90">
+            </div>
+          </div>
+          <button class="btn-primary" onclick="saveGoals()" style="margin-top:4px;">Сохранить настройки</button>
+        </div>
+        <div id="goals-empty" class="empty-state" style="display:none">
+          Настройки доступны только superadmin.
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ КОМАНДА ═══ -->
+    <section id="screen-team" class="screen">
+      <!-- Добавить пользователя -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-title">Добавить пользователя</div>
+        <input class="field-input" id="addUserInput" type="text"
+               placeholder="@username или Telegram ID"
+               oninput="this.value=this.value.trim()">
+        <div style="font-size:12px;color:var(--w30);margin-bottom:10px;">
+          Пользователь должен сначала написать боту /start
+        </div>
+        <!-- Выбор роли -->
+        <div style="font-size:11px;color:var(--w30);margin-bottom:6px;">Роль</div>
+        <div class="role-toggle" id="roleToggle">
+          <button class="role-btn active" data-role="admin" onclick="selectRole('admin')">
+            👤 Admin
+          </button>
+          <button class="role-btn" data-role="superadmin" onclick="selectRole('superadmin')">
+            👑 Superadmin
+          </button>
+        </div>
+        <!-- Выбранная роль — чёткое отображение -->
+        <div id="selectedRoleDisplay" style="font-size:13px;color:var(--orange);margin-bottom:12px;">
+          Выбрана роль: <strong>Admin</strong>
+        </div>
+        <button class="btn-primary" onclick="addUser()">➕ Добавить</button>
+      </div>
+
+      <!-- Список пользователей -->
+      <div id="teamList"><div class="empty-state">Загрузка...</div></div>
+    </section>
+
+  </main>
+
+  <nav class="nav-bar">
+    <button class="nav-item active" id="nav-input" onclick="switchTab('input')">
+      <span class="nav-emoji">📥</span><span>Ввод</span>
+    </button>
+    <button class="nav-item" id="nav-live" onclick="switchTab('live')">
+      <span class="nav-emoji">🟢</span><span>Live</span>
+    </button>
+    <button class="nav-item" id="nav-night" onclick="switchTab('night')">
+      <span class="nav-emoji">🌙</span><span>Ночь</span>
+    </button>
+    <button class="nav-item" id="nav-week" onclick="switchTab('week')">
+      <span class="nav-emoji">📅</span><span>Статы</span>
+    </button>
+    <button class="nav-item" id="nav-team" style="display:none" onclick="switchTab('team')">
+      <span class="nav-emoji">👥</span><span>Команда</span>
+    </button>
+  </nav>
+</div>
+
+<!-- Toast (выше navbar через CSS) -->
+<div id="toast"></div>
+
+<!-- Edit stat sheet -->
+<div class="overlay" id="editStatOverlay" onclick="closeEditStat()">
+  <div class="bottom-sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="editStatTitle">Редактировать запись</div>
+    <div style="margin-bottom:10px;">
+      <div class="edit-label" style="margin-bottom:4px;">Время</div>
+      <input type="time" class="edit-time-input" id="editStatTime">
+    </div>
+    <div style="font-size:11px;color:var(--w30);margin-bottom:6px;">Вошло</div>
+    <div class="edit-stat-grid" style="margin-bottom:12px;">
+      <div class="edit-field">
+        <div class="edit-label">👧 Девушки</div>
+        <input type="number" inputmode="numeric" class="edit-input" id="editGirls" min="0">
+      </div>
+      <div class="edit-field">
+        <div class="edit-label">👦 Парни</div>
+        <input type="number" inputmode="numeric" class="edit-input" id="editBoys" min="0">
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--w30);margin-bottom:6px;">Ушло</div>
+    <div class="edit-stat-grid" style="margin-bottom:12px;">
+      <div class="edit-field">
+        <div class="edit-label">👧 Девушки</div>
+        <input type="number" inputmode="numeric" class="edit-input" id="editGirlsLeft" min="0">
+      </div>
+      <div class="edit-field">
+        <div class="edit-label">👦 Парни</div>
+        <input type="number" inputmode="numeric" class="edit-input" id="editBoysLeft" min="0">
+      </div>
+    </div>
+    <div class="edit-stat-grid">
+      <div class="edit-field">
+        <div class="edit-label">🚫 Отказано</div>
+        <input type="number" inputmode="numeric" class="edit-input" id="editDenied" min="0">
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" onclick="closeEditStat()">Отмена</button>
+      <button class="btn-danger" onclick="deleteCurrentStat()" style="flex:0.6">Удалить</button>
+      <button class="btn-save" onclick="saveEditStat()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete confirm sheet -->
+<div class="overlay" id="deleteOverlay" onclick="closeDelete()">
+  <div class="bottom-sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="deleteTitle">Удалить?</div>
+    <div class="sheet-text" id="deleteText">Пользователь потеряет доступ к боту.</div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" onclick="closeDelete()">Отмена</button>
+      <button class="btn-danger" id="deleteConfirm">Удалить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit role sheet -->
+<div class="overlay" id="editOverlay" onclick="closeEdit()">
+  <div class="bottom-sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="editTitle">Изменить роль</div>
+    <div class="edit-role-btns" id="editRoleBtns"></div>
+    <button class="btn-cancel" onclick="closeEdit()">Отмена</button>
+  </div>
+</div>
+
+<script>
+// ─── Telegram init ────────────────────────────────────
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.setHeaderColor?.('#0A0A0A');
+  tg.setBackgroundColor?.('#0A0A0A');
+}
+
+// API base: when opened via localhost it's the same origin
+const API_BASE = window.location.origin === 'null' ? 'http://localhost:8080' : '';
+
+// ─── Time ────────────────────────────────────────────
+let isManualTime = false;
+let currentTime = new Date();
+
+function p(n) { return String(n).padStart(2,'0'); }
+function updateTimeDisplay() {
+  if (!isManualTime) currentTime = new Date();
+  document.getElementById('timeDisplay').textContent = `${p(currentTime.getHours())}:${p(currentTime.getMinutes())}`;
+}
+updateTimeDisplay();
+setInterval(() => { if (!isManualTime) updateTimeDisplay(); }, 30000);
+
+function toggleTimeEdit() {
+  const inp = document.getElementById('timeInput');
+  inp.style.display = inp.style.display === 'none' || !inp.style.display ? 'block' : 'none';
+  if (inp.style.display === 'block') {
+    inp.value = `${p(currentTime.getHours())}:${p(currentTime.getMinutes())}`;
+    inp.focus();
+  }
+}
+function onTimeChange(val) {
+  const [h, m] = val.split(':').map(Number);
+  currentTime = new Date(); currentTime.setHours(h, m, 0);
+  isManualTime = true;
+  updateTimeDisplay();
+  document.getElementById('timeBadge').textContent = 'изменено';
+  document.getElementById('timeBadge').className = 'time-badge manual';
+  document.getElementById('timeInput').style.display = 'none';
+}
+function resetTime() {
+  isManualTime = false; currentTime = new Date(); updateTimeDisplay();
+  document.getElementById('timeBadge').textContent = 'авто';
+  document.getElementById('timeBadge').className = 'time-badge';
+  document.getElementById('timeInput').style.display = 'none';
+}
+
+// ─── Preview ─────────────────────────────────────────
+function numVal(id) { return parseInt(document.getElementById(id)?.value) || 0; }
+function updatePreview() {
+  const g  = numVal('inp-girls');
+  const b  = numVal('inp-boys');
+  const gl = numVal('inp-girls-left');
+  const bl = numVal('inp-boys-left');
+  const d  = numVal('inp-denied');
+
+  const gi = Math.max(0, g - gl);   // девушек внутри
+  const bi = Math.max(0, b - bl);   // парней внутри
+  const inside = gi + bi;
+  const total  = g + b;
+  const rg = inside > 0 ? Math.round(gi/inside*100) : 0;
+  const fc = (total+d) > 0 ? Math.round(total/(total+d)*100) : 0;
+
+  document.getElementById('prev-inside').textContent   = inside;
+  document.getElementById('prev-girls-in').textContent = gi;
+  document.getElementById('prev-boys-in').textContent  = bi;
+  document.getElementById('prev-ratio').textContent    = inside > 0 ? `${rg}% / ${100-rg}%` : '—';
+  document.getElementById('prev-fc').textContent       = (total+d) > 0 ? `${fc}%` : '—';
+}
+
+async function submitData() {
+  const g  = numVal('inp-girls');
+  const b  = numVal('inp-boys');
+  const gl = numVal('inp-girls-left');
+  const bl = numVal('inp-boys-left');
+  const d  = numVal('inp-denied');
+  const rec = new Date(currentTime);
+  const body = {
+    action: 'save_stats',
+    girls: g, boys: b,
+    girls_left: gl, boys_left: bl,
+    denied: d,
+    recorded_at: rec.toISOString(),
+    is_manual_time: isManualTime,
+  };
+
+  // Проверяем: внутри Telegram с реальным initData?
+  const inTelegram = tg && tg.initData && tg.initData.length > 0;
+
+  if (inTelegram) {
+    tg.sendData(JSON.stringify(body));
+    showToast(`✓ Данные отправлены · ${p(rec.getHours())}:${p(rec.getMinutes())}`);
+  } else {
+    // Браузер — сохраняем напрямую через API
+    try {
+      await apiFetch('/api/input', 'POST', body);
+      showToast(`✓ Сохранено · ${p(rec.getHours())}:${p(rec.getMinutes())}`);
+      // Сбрасываем поля
+      ['inp-girls','inp-boys','inp-girls-left','inp-boys-left','inp-denied'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      updatePreview();
+      loadHistory();
+    } catch(e) {
+      showToast('Ошибка сохранения');
+    }
+  }
+}
+
+// ─── API ─────────────────────────────────────────────
+async function apiFetch(path, method='GET', body=null) {
+  const headers = {};
+  if (tg?.initData) headers['X-Telegram-Init-Data'] = tg.initData;
+  if (body) headers['Content-Type'] = 'application/json';
+  const res = await fetch(API_BASE + path, {
+    method, headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok && res.status !== 200) throw new Error(res.status);
+  return res.json();
+}
+
+// ─── Navigation ──────────────────────────────────────
+let activeTab = 'input';
+function switchTab(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.getElementById('nav-'+name).classList.add('active');
+  activeTab = name;
+  if (name==='input') loadHistory();
+  if (name==='live')  loadLive();
+  if (name==='night') loadNight();
+  if (name==='week')  loadWeek();
+  if (name==='team')  loadTeam();
+}
+
+function switchSubtab(name) {
+  document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.subscreen').forEach(s => s.classList.remove('active'));
+  document.querySelector(`.subtab[onclick="switchSubtab('${name}')"]`).classList.add('active');
+  document.getElementById('sub-'+name).classList.add('active');
+  if (name==='month') loadMonth();
+  if (name==='kpi')   loadKPI();
+  if (name==='goals') loadGoals();
+}
+
+// ─── Charts ──────────────────────────────────────────
+const charts = {};
+const GRID_COLOR = 'rgba(255,255,255,0.06)';
+const TICK_COLOR = 'rgba(255,255,255,0.4)';
+const BASE_OPTS = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { grid:{color:GRID_COLOR}, ticks:{color:TICK_COLOR, font:{size:11}} },
+    y: { grid:{color:GRID_COLOR}, ticks:{color:TICK_COLOR, font:{size:11}} },
+  },
+};
+
+function mkChart(id, type, labels, datasets, extra={}) {
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, {
+    type, data:{labels,datasets},
+    options: deepMerge({}, BASE_OPTS, extra),
+  });
+}
+
+function deepMerge(target, ...sources) {
+  for (const src of sources) {
+    for (const k in src) {
+      if (src[k] && typeof src[k]==='object' && !Array.isArray(src[k])) {
+        target[k] = deepMerge(target[k]||{}, src[k]);
+      } else { target[k] = src[k]; }
+    }
+  }
+  return target;
+}
+
+// ─── Live ─────────────────────────────────────────────
+let _settings = { max_capacity:'200', target_girls_pct:'55', target_fc_pct:'90', club_name:'KIKI' };
+
+async function loadSettings() {
+  try { _settings = await apiFetch('/api/settings'); } catch(e) {}
+}
+
+function mkDoughnut(id, g, b, pctElId, absElId) {
+  if (charts[id]) charts[id].destroy();
+  const total = g + b;
+  if (!total) return;
+  const ctx = document.getElementById(id)?.getContext('2d');
+  if (!ctx) return;
+  charts[id] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Девушки','Парни'],
+      datasets: [{ data:[g,b], backgroundColor:['#FF6B00','rgba(255,255,255,0.15)'], borderWidth:0, hoverOffset:4 }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, cutout:'68%',
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw} чел (${Math.round(c.raw/total*100)}%)`}} },
+    },
+  });
+  const pct = Math.round(g/total*100);
+  if (pctElId) document.getElementById(pctElId).textContent = pct+'%';
+  if (absElId) document.getElementById(absElId).textContent = `${g} / ${b}`;
+}
+
+async function loadLive() {
+  await loadSettings();
+  try {
+    const d = await apiFetch('/api/live');
+    const hasData = d.hourly?.length > 0;
+    document.getElementById('live-empty').style.display = hasData ? 'none' : 'block';
+
+    document.getElementById('live-inside').textContent       = d.inside        ?? '—';
+    document.getElementById('live-girls-in').textContent    = d.girls_inside   ?? '—';
+    document.getElementById('live-boys-in').textContent     = d.boys_inside    ?? '—';
+    document.getElementById('live-girls-entered').textContent = d.girls_entered ?? '—';
+    document.getElementById('live-boys-entered').textContent  = d.boys_entered  ?? '—';
+    document.getElementById('live-left').textContent         = d.left           ?? '—';
+    document.getElementById('live-denied').textContent       = d.denied         ?? '—';
+
+    const cap = parseInt(_settings.max_capacity) || 200;
+    const pct = d.inside ? Math.min(100, Math.round(d.inside/cap*100)) : 0;
+    document.getElementById('live-bar').style.width = pct+'%';
+    document.getElementById('live-pct').textContent = `${pct}% заполнение (макс ${cap} чел)`;
+
+    // Doughnut — кто сейчас ВНУТРИ (не вошло за всё время)
+    mkDoughnut('live-ratio-chart', d.girls_inside||0, d.boys_inside||0, 'live-ratio-pct', 'live-ratio-abs');
+
+    if (hasData) {
+      const curH = new Date().getHours();
+      mkChart('live-chart','bar', d.hourly.map(h=>h.time), [{
+        data:d.hourly.map(h=>h.entered), borderRadius:4,
+        backgroundColor:d.hourly.map(h=>parseInt(h.time)===curH?'#FF6B00':'rgba(255,107,0,0.3)'),
+      }]);
+    }
+  } catch(e) { console.error('loadLive',e); }
+}
+
+// ─── Night ────────────────────────────────────────────
+let allNights = [];       // список всех ночей [{date, label, is_open}]
+let nightIdx  = 0;        // текущий индекс (0 = самая свежая)
+
+async function loadNightsList() {
+  try {
+    const d = await apiFetch('/api/nights');
+    allNights = d.nights || [];
+  } catch(e) { allNights = []; }
+}
+
+function shiftNight(dir) {
+  const next = nightIdx + dir;
+  if (next < 0 || next >= allNights.length) return;
+  nightIdx = next;
+  loadNightByIndex();
+}
+
+async function loadNight() {
+  await loadNightsList();
+  nightIdx = 0;
+  await loadNightByIndex();
+}
+
+async function loadNightByIndex() {
+  const prevBtn = document.getElementById('nightPrev');
+  const nextBtn = document.getElementById('nightNext');
+  prevBtn.disabled = nightIdx >= allNights.length - 1;
+  nextBtn.disabled = nightIdx <= 0;
+
+  const dateParam = allNights[nightIdx]?.date;
+  const url = dateParam ? `/api/night?date=${dateParam}` : '/api/night';
+
+  try {
+    const d = await apiFetch(url);
+    const empty = d.empty || !d.hourly?.length;
+
+    // Дата в шапке
+    document.getElementById('nightDateLabel').textContent = d.date_label || allNights[nightIdx]?.label || '—';
+    document.getElementById('nightDateSub').textContent   = d.is_open ? '🟢 ночь идёт' : '';
+
+    document.getElementById('night-empty').style.display  = empty ? 'block' : 'none';
+    document.getElementById('night-total').textContent    = empty ? '—' : d.total;
+    document.getElementById('night-peak').textContent     = d.peak?.val  ?? '—';
+    document.getElementById('night-peak-t').textContent   = d.peak?.time ?? '';
+    document.getElementById('night-fc').textContent       = d.fc != null ? d.fc+'%' : '—';
+    document.getElementById('night-ratio').textContent    = d.ratio ? `${d.ratio[0]}/${d.ratio[1]}` : '—';
+
+    // Doughnut Ж/М
+    const g = d.total_girls ?? 0, b = d.total_boys ?? 0;
+    document.getElementById('ratio-pct-g').textContent = (g + b) > 0 ? Math.round(g/(g+b)*100)+'%' : '—';
+    document.getElementById('ratio-g-abs').textContent = g;
+    document.getElementById('ratio-b-abs').textContent = b;
+
+    if (charts['ratio-chart']) charts['ratio-chart'].destroy();
+    if (g + b > 0) {
+      const ctx = document.getElementById('ratio-chart').getContext('2d');
+      charts['ratio-chart'] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Девушки','Парни'],
+          datasets: [{
+            data: [g, b],
+            backgroundColor: ['#FF6B00','rgba(255,255,255,0.15)'],
+            borderColor: ['#FF6B00','rgba(255,255,255,0.15)'],
+            borderWidth: 0,
+            hoverOffset: 4,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          cutout: '68%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ` ${ctx.label}: ${ctx.raw} чел (${Math.round(ctx.raw/(g+b)*100)}%)`
+              }
+            }
+          },
+        },
+      });
+    }
+
+    if (!empty) {
+      mkChart('night-chart','bar', d.hourly.map(h=>h.time), [
+        {label:'Вошло', data:d.hourly.map(h=>h.entered), backgroundColor:'#FF6B00', borderRadius:4},
+        {label:'Ушло',  data:d.hourly.map(h=>h.left),    backgroundColor:'rgba(255,255,255,0.18)', borderRadius:4},
+      ]);
+    }
+  } catch(e) { console.error('loadNight',e); }
+}
+
+// ─── Week ─────────────────────────────────────────────
+async function loadWeek() {
+  try {
+    const d = await apiFetch('/api/week');
+    const empty = !d.nights?.length;
+    document.getElementById('week-empty').style.display = empty ? 'block' : 'none';
+
+    // Дата-бар
+    const bar = document.getElementById('week-date-bar');
+    if (!empty) {
+      const total = d.nights.reduce((s,n)=>s+n.total,0);
+      const best  = d.nights.reduce((a,b)=>a.total>b.total?a:b);
+      bar.textContent = `${d.nights[0]?.label} — ${d.nights[d.nights.length-1]?.label} · итого ${total} чел · лучшая ночь: ${best.label} (${best.total})`;
+      bar.style.display = 'block';
+
+      // Мини-статы под графиком
+      const grid = document.getElementById('week-stats-grid');
+      if (grid) {
+        grid.innerHTML = `
+          <div class="stat-card"><div class="lbl">Ночей</div><div class="val">${d.nights.length}</div></div>
+          <div class="stat-card"><div class="lbl">Посетителей</div><div class="val">${total}</div></div>
+          <div class="stat-card"><div class="lbl">Avg за ночь</div><div class="val">${Math.round(total/d.nights.length)}</div></div>
+          <div class="stat-card"><div class="lbl">Лучшая</div><div class="val">${best.total}</div><div class="sub">${best.label}</div></div>
+        `;
+      }
+
+      mkChart('week-chart','bar', d.nights.map(n=>n.label), [{
+        data: d.nights.map(n=>n.total), borderRadius:4,
+        backgroundColor: d.nights.map(n=>n.current?'#FF6B00':'rgba(255,107,0,0.35)'),
+      }]);
+    } else {
+      bar.style.display = 'none';
+    }
+  } catch(e) { console.error('loadWeek',e); }
+}
+
+async function loadMonth() {
+  try {
+    const d = await apiFetch('/api/month');
+    const empty = !d.nights?.length;
+    document.getElementById('month-empty').style.display = empty ? 'block' : 'none';
+
+    const bar = document.getElementById('month-date-bar');
+    if (!empty) {
+      const now = new Date();
+      const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+      const total = d.nights.reduce((s,n)=>s+n.total,0);
+      bar.textContent = `${MONTHS[now.getMonth()]} ${now.getFullYear()} · ${d.nights.length} ночей · ${total} гостей`;
+      bar.style.display = 'block';
+      mkChart('month-chart','line', d.nights.map(n=>n.label), [{
+        data: d.nights.map(n=>n.total),
+        borderColor:'#FF6B00', backgroundColor:'rgba(255,107,0,0.12)',
+        tension:0.4, fill:true, pointBackgroundColor:'#FF6B00', pointRadius:5,
+      }]);
+    } else {
+      bar.style.display = 'none';
+    }
+  } catch(e) { console.error('loadMonth',e); }
+}
+
+async function loadKPI() {
+  await loadSettings();
+  try {
+    const d = await apiFetch('/api/kpi');
+    const now = new Date();
+    const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+    const bar = document.getElementById('kpi-date-bar');
+    bar.textContent = `${MONTHS[now.getMonth()]} ${now.getFullYear()} · только Пт и Сб`;
+
+    const fc    = d.items?.[0]?.actual ?? 0;
+    const ratio = d.items?.[1]?.actual ?? 0;
+    const cap   = parseInt(_settings.max_capacity) || 200;
+
+    document.getElementById('kpi-fc').textContent    = fc    ? fc+'%'    : '—';
+    document.getElementById('kpi-ratio').textContent = ratio ? ratio+'%' : '—';
+    document.getElementById('kpi-nights').textContent= d.nights_count ?? '—';
+    document.getElementById('kpi-avg').textContent   = d.avg_inside   ? Math.round(d.avg_inside)+' чел' : '—';
+
+    // Обновляем цели из настроек
+    document.getElementById('kpi-fc-target').textContent    = _settings.target_fc_pct    || '90';
+    document.getElementById('kpi-ratio-target').textContent = _settings.target_girls_pct || '55';
+    document.getElementById('kpi-capacity').textContent     = cap;
+
+    // Цвет по выполнению
+    const fcEl = document.getElementById('kpi-fc');
+    const fcTarget = parseInt(_settings.target_fc_pct) || 90;
+    fcEl.style.color = fc >= fcTarget ? 'var(--success)' : fc > 0 ? 'var(--danger)' : '';
+
+    const ratioEl = document.getElementById('kpi-ratio');
+    const ratioTarget = parseInt(_settings.target_girls_pct) || 55;
+    ratioEl.style.color = ratio >= ratioTarget ? 'var(--success)' : ratio > 0 ? 'var(--danger)' : '';
+
+    if (d.items?.length) {
+      mkChart('kpi-chart','bar', d.items.map(i=>i.label), [
+        {label:'Факт', data:d.items.map(i=>i.actual), backgroundColor:'#FF6B00', borderRadius:4, indexAxis:'y'},
+        {label:'Цель', data:d.items.map(i=>i.target), backgroundColor:'rgba(255,255,255,0.14)', borderRadius:4, indexAxis:'y'},
+      ], {indexAxis:'y'});
+    }
+  } catch(e) { console.error('loadKPI',e); }
+}
+
+// ─── Цели / Настройки ────────────────────────────────
+async function loadGoals() {
+  await loadSettings();
+  if (currentUserRole !== 'superadmin') {
+    document.getElementById('goals-empty').style.display = 'block';
+    document.querySelector('#sub-goals .card').style.display = 'none';
+    return;
+  }
+  document.getElementById('set-club-name').value  = _settings.club_name       || 'KIKI';
+  document.getElementById('set-capacity').value   = _settings.max_capacity    || '200';
+  document.getElementById('set-girls-pct').value  = _settings.target_girls_pct|| '55';
+  document.getElementById('set-fc-pct').value     = _settings.target_fc_pct   || '90';
+}
+
+async function saveGoals() {
+  const body = {
+    club_name:        document.getElementById('set-club-name').value.trim(),
+    max_capacity:     document.getElementById('set-capacity').value,
+    target_girls_pct: document.getElementById('set-girls-pct').value,
+    target_fc_pct:    document.getElementById('set-fc-pct').value,
+  };
+  try {
+    const res = await apiFetch('/api/settings', 'POST', body);
+    if (res.ok) {
+      showToast('✓ Настройки сохранены');
+      await loadSettings();
+    } else {
+      showToast(res.error || 'Ошибка');
+    }
+  } catch(e) { showToast('Ошибка сети'); }
+}
+
+// ─── Team ─────────────────────────────────────────────
+// ─── Команда ─────────────────────────────────────────
+let selectedRole = 'admin';
+let pendingDeleteId = null;
+let pendingEditId = null;
+
+function selectRole(r) {
+  selectedRole = r;
+  document.querySelectorAll('#roleToggle .role-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.role === r);
+  });
+  const labels = { admin:'Admin', superadmin:'Superadmin' };
+  const el = document.getElementById('selectedRoleDisplay');
+  if (el) el.innerHTML = `Выбрана роль: <strong>${labels[r] || r}</strong>`;
+}
+
+async function addUser() {
+  const inp = document.getElementById('addUserInput').value.trim();
+  if (!inp) { showToast('Введи @username или Telegram ID'); return; }
+  const btn = document.querySelector('#screen-team .btn-primary');
+  btn.textContent = 'Добавляю...';
+  btn.disabled = true;
+  try {
+    const res = await apiFetch('/api/users/role', 'POST', { identifier: inp, role: selectedRole });
+    if (res.ok) {
+      const label = selectedRole === 'superadmin' ? 'Superadmin' : 'Admin';
+      showToast(`✓ ${inp} — теперь ${label}`);
+      document.getElementById('addUserInput').value = '';
+      loadTeam();
+    } else {
+      showToast(res.error || 'Ошибка');
+    }
+  } catch(e) { showToast('Ошибка сети'); }
+  finally {
+    btn.textContent = '➕ Добавить';
+    btn.disabled = false;
+  }
+}
+
+async function loadTeam() {
+  try {
+    const d = await apiFetch('/api/users');
+    renderTeam(d.users || []);
+  } catch(e) {
+    document.getElementById('teamList').innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
+  }
+}
+
+function initials(u) {
+  if (u.full_name) {
+    const pts = u.full_name.trim().split(' ').filter(Boolean);
+    return ((pts[0]?.[0] || '') + (pts[1]?.[0] || '')).toUpperCase() || '?';
+  }
+  return (u.username || '?').replace('@','').slice(0, 2).toUpperCase();
+}
+
+const MONTHS_SHORT = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+function sinceStr(u) {
+  if (!u.role_set_at) return '';
+  const d = new Date(u.role_set_at);
+  return `с ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+}
+function agoStr(u) {
+  if (!u.created_at) return '';
+  const diff = (Date.now() - new Date(u.created_at)) / 60000;
+  if (diff < 2)    return 'только что';
+  if (diff < 60)   return `${Math.round(diff)} мин назад`;
+  if (diff < 1440) return `${Math.round(diff/60)} ч назад`;
+  return `${Math.round(diff/1440)} дн назад`;
+}
+
+function renderTeam(users) {
+  const groups = { superadmin: [], admin: [], pending: [] };
+  users.forEach(u => {
+    // owner обрабатываем как admin (оставляем для совместимости)
+    const key = u.role === 'owner' ? 'admin' : (groups[u.role] !== undefined ? u.role : 'pending');
+    groups[key].push(u);
+  });
+
+  let html = '';
+
+  // Superadmin
+  if (groups.superadmin.length) {
+    html += `<div class="section-label">👑 Superadmin (${groups.superadmin.length})</div>`;
+    groups.superadmin.forEach(u => {
+      const name = u.username ? `@${u.username}` : `ID:${u.telegram_id}`;
+      html += `<div class="user-card">
+        <div class="avatar av-sa">${initials(u)}</div>
+        <div class="user-info">
+          <div class="user-name">${name}</div>
+          <div class="user-meta">superadmin · ${sinceStr(u)}</div>
+        </div>
+      </div>`;
+    });
+  }
+
+  // Admin
+  if (groups.admin.length) {
+    html += `<div class="section-label">👤 Admin (${groups.admin.length})</div>`;
+    groups.admin.forEach(u => {
+      const name = u.username ? `@${u.username}` : `ID:${u.telegram_id}`;
+      html += `<div class="user-card">
+        <div class="avatar av-admin">${initials(u)}</div>
+        <div class="user-info">
+          <div class="user-name">${name}</div>
+          <div class="user-meta">admin · ${sinceStr(u)}</div>
+        </div>
+        <div class="user-actions">
+          <button class="icon-btn" onclick="openEdit(${u.telegram_id},'${name}','${u.role}')" title="Изменить роль">✏️</button>
+          <button class="icon-btn del" onclick="confirmDelete(${u.telegram_id},'${name}')" title="Убрать доступ">🗑</button>
+        </div>
+      </div>`;
+    });
+  }
+
+  // Pending
+  if (groups.pending.length) {
+    html += `<div class="section-label">⏳ Ожидают доступа (${groups.pending.length})</div>`;
+    groups.pending.forEach(u => {
+      const name = u.username ? `@${u.username}` : `ID:${u.telegram_id}`;
+      html += `<div class="user-card">
+        <div class="avatar av-pending">?</div>
+        <div class="user-info">
+          <div class="user-name">${name}</div>
+          <div class="user-meta">${agoStr(u)}</div>
+        </div>
+        <div class="user-actions">
+          <button class="icon-btn ok" onclick="approveUser(${u.telegram_id},'${name}')" title="Выдать Admin">✓</button>
+          <button class="icon-btn del" onclick="confirmDelete(${u.telegram_id},'${name}')" title="Отклонить">✕</button>
+        </div>
+      </div>`;
+    });
+  }
+
+  if (!html) html = '<div class="empty-state">Пользователей нет.<br>Добавь первого через форму выше.</div>';
+  document.getElementById('teamList').innerHTML = html;
+}
+
+async function approveUser(tgId, name) {
+  const res = await apiFetch('/api/users/role', 'POST', { telegram_id: tgId, role: 'admin' });
+  showToast(res.ok ? `✓ ${name} — теперь Admin` : (res.error || 'Ошибка'));
+  loadTeam();
+}
+
+function openEdit(tgId, name, currentRole) {
+  pendingEditId = tgId;
+  document.getElementById('editTitle').textContent = `Изменить роль — ${name}`;
+  // Текущая роль: owner → admin для отображения
+  const displayRole = currentRole === 'owner' ? 'admin' : currentRole;
+  const options = [
+    { r: 'superadmin', l: '👑 Superadmin' },
+    { r: 'admin',      l: '👤 Admin' },
+    { r: 'pending',    l: '🚫 Убрать доступ' },
+  ].filter(x => x.r !== displayRole);
+  document.getElementById('editRoleBtns').innerHTML = options
+    .map(x => `<button class="edit-role-opt" onclick="applyEdit('${x.r}')">${x.l}</button>`)
+    .join('');
+  document.getElementById('editOverlay').classList.add('show');
+}
+async function applyEdit(role) {
+  closeEdit();
+  const res = await apiFetch('/api/users/role', 'POST', { telegram_id: pendingEditId, role });
+  const labels = { superadmin:'Superadmin', admin:'Admin', pending:'без доступа' };
+  showToast(res.ok ? `✓ Роль изменена: ${labels[role] || role}` : (res.error || 'Ошибка'));
+  loadTeam();
+}
+function closeEdit() { document.getElementById('editOverlay').classList.remove('show'); }
+
+function confirmDelete(tgId, name) {
+  pendingDeleteId = tgId;
+  document.getElementById('deleteTitle').textContent = `Убрать ${name}?`;
+  document.getElementById('deleteText').textContent = 'Пользователь потеряет доступ к боту.';
+  document.getElementById('deleteConfirm').onclick = doDelete;
+  document.getElementById('deleteOverlay').classList.add('show');
+}
+async function doDelete() {
+  closeDelete();
+  const res = await apiFetch('/api/users/remove', 'POST', { telegram_id: pendingDeleteId });
+  showToast(res.ok ? '✓ Доступ убран' : (res.error || 'Ошибка'));
+  loadTeam();
+}
+function closeDelete() { document.getElementById('deleteOverlay').classList.remove('show'); }
+
+// ─── Toast ────────────────────────────────────────────
+function showToast(text) {
+  const t = document.getElementById('toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ─── История ввода ───────────────────────────────────
+let currentEditId = null;
+
+async function loadHistory() {
+  try {
+    const d = await apiFetch('/api/history');
+    renderHistory(d.entries || []);
+  } catch(e) {
+    document.getElementById('historyList').innerHTML =
+      '<div style="text-align:center;color:var(--w30);font-size:13px;padding:16px">Нет данных</div>';
+  }
+}
+
+function renderHistory(entries) {
+  const el = document.getElementById('historyList');
+  if (!entries.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--w30);font-size:13px;padding:16px">Записей за эту ночь нет</div>';
+    return;
+  }
+  // Показываем от свежих к старым
+  const sorted = [...entries].reverse();
+  el.innerHTML = sorted.map(e => {
+    const gl = e.girls_left || 0, bl = e.boys_left || 0;
+    const gi = Math.max(0, e.girls - gl);
+    const bi = Math.max(0, e.boys  - bl);
+    const inside = gi + bi;
+    const total = e.girls + e.boys;
+    const fc = (total + e.denied) > 0 ? Math.round(total/(total+e.denied)*100) : 0;
+    const rg = inside > 0 ? Math.round(gi/inside*100) : 0;
+    const safe = JSON.stringify(e).replace(/"/g,'&quot;');
+    return `<div class="history-entry">
+      <div class="entry-time">${e.time}</div>
+      <div class="entry-data">
+        <div class="entry-row">
+          <span title="вошло">👧+${e.girls}</span>
+          <span title="вошло">👦+${e.boys}</span>
+          <span title="ушло">↩️${gl}/${bl}</span>
+          <span title="отказано">🚫${e.denied}</span>
+        </div>
+        <div class="entry-row" style="margin-top:2px;font-size:11px;">
+          Внутри: <span>${inside}</span> (${rg}%Ж) · FC: <span>${fc}%</span>
+          ${e.is_manual_time ? ' · <span style="color:var(--warning)">ручное</span>' : ''}
+        </div>
+      </div>
+      <div class="entry-actions">
+        <button class="icon-btn" style="color:var(--orange)" onclick="openEditStat(${safe})">✏️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openEditStat(entry) {
+  currentEditId = entry.id;
+  document.getElementById('editStatTitle').textContent = `Запись · ${entry.time}`;
+  document.getElementById('editStatTime').value    = entry.time;
+  document.getElementById('editGirls').value       = entry.girls;
+  document.getElementById('editBoys').value        = entry.boys;
+  document.getElementById('editGirlsLeft').value   = entry.girls_left || 0;
+  document.getElementById('editBoysLeft').value    = entry.boys_left  || 0;
+  document.getElementById('editDenied').value      = entry.denied;
+  document.getElementById('editStatOverlay').classList.add('show');
+}
+
+function closeEditStat() {
+  document.getElementById('editStatOverlay').classList.remove('show');
+  currentEditId = null;
+}
+
+async function saveEditStat() {
+  if (!currentEditId) return;
+  const body = {
+    id:         currentEditId,
+    time:       document.getElementById('editStatTime').value,
+    girls:      parseInt(document.getElementById('editGirls').value)      || 0,
+    boys:       parseInt(document.getElementById('editBoys').value)       || 0,
+    girls_left: parseInt(document.getElementById('editGirlsLeft').value)  || 0,
+    boys_left:  parseInt(document.getElementById('editBoysLeft').value)   || 0,
+    denied:     parseInt(document.getElementById('editDenied').value)     || 0,
+  };
+  try {
+    const res = await apiFetch('/api/stats/edit', 'POST', body);
+    if (res.ok) {
+      showToast('✓ Запись обновлена');
+      closeEditStat();
+      loadHistory();
+    } else {
+      showToast(res.error || 'Ошибка');
+    }
+  } catch(e) { showToast('Ошибка сети'); }
+}
+
+async function deleteCurrentStat() {
+  if (!currentEditId) return;
+  try {
+    const res = await apiFetch('/api/stats/delete', 'POST', { id: currentEditId });
+    if (res.ok) {
+      showToast('✓ Запись удалена');
+      closeEditStat();
+      loadHistory();
+    } else {
+      showToast(res.error || 'Ошибка');
+    }
+  } catch(e) { showToast('Ошибка сети'); }
+}
+
+// ─── Init ─────────────────────────────────────────────
+let currentUserRole = 'pending';
+
+async function init() {
+  try {
+    const res = await apiFetch('/api/me');
+    currentUserRole = res.role || 'pending';
+  } catch(e) {
+    currentUserRole = 'superadmin'; // dev-режим
+  }
+
+  const ROLE_LABELS = {
+    superadmin: '👑 Superadmin',
+    admin:      '👤 Admin',
+    owner:      '👤 Admin',   // owner = admin в новой системе
+    pending:    '⏳ Нет доступа',
+  };
+  document.getElementById('headerBadge').textContent = ROLE_LABELS[currentUserRole] || currentUserRole;
+
+  const navTeam = document.getElementById('nav-team');
+
+  // Команда — только superadmin
+  navTeam.style.display = currentUserRole === 'superadmin' ? 'flex' : 'none';
+
+  // Вкладка Цели в Статах — только superadmin
+  const goalsTab = document.querySelector('.subtab[onclick="switchSubtab(\'goals\')"]');
+  if (goalsTab) goalsTab.style.display = currentUserRole === 'superadmin' ? '' : 'none';
+
+  // Pending — ничего не видит
+  if (currentUserRole === 'pending') {
+    document.getElementById('nav-input').style.display = 'none';
+    document.querySelectorAll('.nav-item').forEach(n => n.style.display = 'none');
+    document.getElementById('screens').innerHTML =
+      '<div class="empty-state" style="margin-top:40px">🚫 Нет доступа.<br>Обратись к администратору.</div>';
+    return;
+  }
+
+  // superadmin и admin — одинаковый начальный экран (Ввод)
+  // owner (legacy) — тоже открываем Ввод
+  loadHistory();
+}
+init();
+</script>
+</body>
+</html>
