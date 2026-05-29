@@ -85,55 +85,54 @@ def _emoji(signal: str) -> str:
 
 async def get_benchmark(session: AsyncSession, night_id: int, hour: int, day_of_week: str) -> dict | None:
     """
-    Считает benchmark на основе всех записей в БД за тот же день недели и час,
-    кроме текущей ночи. Возвращает None если данных < 2 ночей.
+    Benchmark по итогам ВСЕЙ ночи (не по конкретному часу).
+    Сравнивает текущую ночь со средними по историческим ночам того же дня недели.
+    Возвращает None если данных < 2 ночей.
     """
-    from sqlalchemy import select, func
+    from sqlalchemy import select
     from models.db import HourlyStat, ClubNight
 
-    # Берём все записи за нужный день недели и час (кроме текущей ночи)
+    # Все исторические ночи того же дня недели кроме текущей
     result = await session.execute(
-        select(HourlyStat, ClubNight)
-        .join(ClubNight, HourlyStat.night_id == ClubNight.id)
-        .where(
+        select(ClubNight).where(
             ClubNight.day_of_week == day_of_week,
             ClubNight.id != night_id,
         )
     )
-    rows = result.all()
-
-    # Фильтруем по часу
-    hist = [(s, n) for s, n in rows if s.recorded_at.hour == hour]
-    if len(hist) < 2:
+    hist_nights = result.scalars().all()
+    if len(hist_nights) < 2:
         return None
 
-    # Считаем средние по часовым записям
-    avg_girls  = sum(s.girls_entered for s, _ in hist) / len(hist)
-    avg_boys   = sum(s.boys_entered  for s, _ in hist) / len(hist)
-    avg_denied = sum(s.denied        for s, _ in hist) / len(hist)
+    # Для каждой исторической ночи считаем итоги
+    night_totals = []
+    for n in hist_nights:
+        res = await session.execute(select(HourlyStat).where(HourlyStat.night_id == n.id))
+        stats = res.scalars().all()
+        if not stats:
+            continue
+        g = sum(s.girls_entered for s in stats)
+        b = sum(s.boys_entered  for s in stats)
+        d = sum(s.denied        for s in stats)
+        l = sum(s.left_count    for s in stats)
+        inside = max(0, g + b - l)
+        night_totals.append({"girls": g, "boys": b, "denied": d, "inside": inside, "total": g + b})
 
-    # Накопленный inside на этот час (по ночам)
-    night_ids = list({n.id for _, n in hist})
-    inside_per_night = []
-    for nid in night_ids:
-        night_stats_res = await session.execute(
-            select(HourlyStat)
-            .join(ClubNight, HourlyStat.night_id == ClubNight.id)
-            .where(HourlyStat.night_id == nid)
-            .where(HourlyStat.recorded_at <= next(s.recorded_at for s, n in hist if n.id == nid))
-            .order_by(HourlyStat.recorded_at)
-        )
-        night_stats = night_stats_res.scalars().all()
-        inside = max(0, sum(s.girls_entered + s.boys_entered - s.left_count for s in night_stats))
-        inside_per_night.append(inside)
-    avg_inside = sum(inside_per_night) / len(inside_per_night) if inside_per_night else 0
+    if len(night_totals) < 2:
+        return None
+
+    avg_girls  = sum(t["girls"]  for t in night_totals) / len(night_totals)
+    avg_boys   = sum(t["boys"]   for t in night_totals) / len(night_totals)
+    avg_inside = sum(t["inside"] for t in night_totals) / len(night_totals)
+    avg_denied = sum(t["denied"] for t in night_totals) / len(night_totals)
+    avg_total  = sum(t["total"]  for t in night_totals) / len(night_totals)
 
     return {
         "avg_girls":     round(avg_girls, 1),
         "avg_boys":      round(avg_boys, 1),
         "avg_inside":    round(avg_inside, 1),
         "avg_denied":    round(avg_denied, 1),
-        "sample_count":  len(hist),
+        "avg_total":     round(avg_total, 1),
+        "sample_count":  len(night_totals),
     }
 
 

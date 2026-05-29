@@ -40,7 +40,7 @@ async def cmd_live(message: Message, role: str) -> None:
         total_left   = sum(s.left_count    for s in stats)
         total_denied = sum(s.denied        for s in stats)
 
-        bm = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
+        bm = await stats_service.get_benchmark(session, night.id, 0, night.day_of_week)
 
     from bot.messages import progress_bar
     capacity = 200
@@ -52,35 +52,33 @@ async def cmd_live(message: Message, role: str) -> None:
               "mon": "понедельникам", "tue": "вторникам", "wed": "средам", "thu": "четвергам"}
 
     def fmt_delta(cur, avg):
-        if avg == 0:
+        if not avg:
             return ""
         d = round((cur / avg - 1) * 100)
-        sig = stats_service._signal(d)
-        em  = stats_service._emoji(sig)
-        return f"  {em} {'+' if d >= 0 else ''}{d}% vs avg"
+        em = stats_service._emoji(stats_service._signal(d))
+        return f" {em} {'+' if d >= 0 else ''}{d}% vs avg"
 
-    inside_delta = fmt_delta(inside, bm["avg_inside"]) if bm else ""
-    girls_delta  = fmt_delta(split["girls_inside"], bm["avg_girls"]) if bm else ""
-    boys_delta   = fmt_delta(split["boys_inside"],  bm["avg_boys"])  if bm else ""
+    girls_delta = fmt_delta(total_girls, bm["avg_girls"])  if bm else ""
+    boys_delta  = fmt_delta(total_boys,  bm["avg_boys"])   if bm else ""
+    total_delta = fmt_delta(total_girls + total_boys, bm["avg_total"]) if bm else ""
 
     text = (
         f"🟢 KIKI — Live сейчас\n\n"
-        f"👥 Внутри: {inside} чел{inside_delta}\n"
+        f"👥 Внутри: {inside} чел\n"
         f"📊 Загрузка: {bar} {pct}%\n\n"
-        f"👧 Девушки: {split['girls_inside']}{girls_delta}\n"
-        f"👦 Парни: {split['boys_inside']}{boys_delta}\n"
-        f"🚫 Отказано: {total_denied}\n\n"
+        f"👧 Девушки: {total_girls}{girls_delta}\n"
+        f"👦 Парни: {total_boys}{boys_delta}\n"
+        f"🚫 Отказано: {total_denied}\n"
+        f"📥 Всего вошло: {total_girls + total_boys}{total_delta}\n\n"
         f"🔥 Пик: {peak_time} — {peak_val} чел\n"
         f"🎯 FC конверсия: {fc}%\n"
     )
     if bm:
         text += (
-            f"\n📊 Ср по {dow_ru.get(night.day_of_week, night.day_of_week)} в {cur_hour:02d}:00:\n"
-            f"   Внутри: ~{bm['avg_inside']:.0f}  "
-            f"Девушки: ~{bm['avg_girls']:.0f}  Парни: ~{bm['avg_boys']:.0f}\n"
-            f"   (выборка: {bm['sample_count']} ночей)\n"
+            f"\n📊 Ср по {dow_ru.get(night.day_of_week, night.day_of_week)} ({bm['sample_count']} ночей):\n"
+            f"   Всего: ~{bm['avg_total']:.0f} | Д: ~{bm['avg_girls']:.0f} | П: ~{bm['avg_boys']:.0f}\n"
         )
-    text += f"🕐 Обновлено: {now_str}"
+    text += f"\n🕐 Обновлено: {now_str}"
     await message.answer(text)
 
 

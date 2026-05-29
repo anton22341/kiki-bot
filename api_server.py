@@ -100,7 +100,7 @@ async def api_live(request: web.Request) -> web.Response:
         # Benchmark
         from datetime import datetime as _dt
         cur_hour = _dt.utcnow().hour
-        bm = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
+        bm = await stats_service.get_benchmark(session, night.id, 0, night.day_of_week)
 
     def delta_pct(cur, avg):
         if not avg:
@@ -118,17 +118,19 @@ async def api_live(request: web.Request) -> web.Response:
 
     bm_data = None
     if bm:
-        d_inside = delta_pct(inside, bm["avg_inside"])
-        d_girls  = delta_pct(split["girls_inside"], bm["avg_girls"])
-        d_boys   = delta_pct(split["boys_inside"],  bm["avg_boys"])
+        total_now = girls_entered + boys_entered
+        d_total  = delta_pct(total_now,    bm["avg_total"])
+        d_girls  = delta_pct(girls_entered, bm["avg_girls"])
+        d_boys   = delta_pct(boys_entered,  bm["avg_boys"])
         bm_data  = {
-            "avg_inside":     bm["avg_inside"],
+            "avg_total":      bm["avg_total"],
             "avg_girls":      bm["avg_girls"],
             "avg_boys":       bm["avg_boys"],
-            "delta_inside":   d_inside,
+            "avg_inside":     bm["avg_inside"],
+            "delta_total":    d_total,
             "delta_girls":    d_girls,
             "delta_boys":     d_boys,
-            "signal_inside":  signal(d_inside),
+            "signal_total":   signal(d_total),
             "signal_girls":   signal(d_girls),
             "signal_boys":    signal(d_boys),
             "sample_count":   bm["sample_count"],

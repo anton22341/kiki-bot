@@ -1068,7 +1068,7 @@ async function loadLive() {
       return `<span style="color:${c}">${e} ${sign}${delta}% avg ~${Math.round(avg)}</span>`;
     }
     const bm = d.benchmark;
-    document.getElementById('live-bm-inside').innerHTML = bm ? fmtBm(bm.delta_inside, bm.signal_inside, bm.avg_inside) : '';
+    document.getElementById('live-bm-inside').innerHTML = bm ? fmtBm(bm.delta_total,  bm.signal_total,  bm.avg_total)  : '';
     document.getElementById('live-bm-girls').innerHTML  = bm ? fmtBm(bm.delta_girls,  bm.signal_girls,  bm.avg_girls)  : '';
     document.getElementById('live-bm-boys').innerHTML   = bm ? fmtBm(bm.delta_boys,   bm.signal_boys,   bm.avg_boys)   : '';
 
