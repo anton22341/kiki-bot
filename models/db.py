@@ -91,7 +91,7 @@ def _make_engine():
 
     return create_async_engine(
         url,
-        connect_args={"ssl": "require", "statement_cache_size": 0},
+        connect_args={"ssl": True, "statement_cache_size": 0},
         pool_size=5,
         max_overflow=10,
         pool_pre_ping=True,
