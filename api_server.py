@@ -137,6 +137,7 @@ async def api_live(request: web.Request) -> web.Response:
             "sample_count":   bm["sample_count"],
             "day_of_week":    night.day_of_week,
             "used_hour":      bm.get("used_hour", cur_hour),
+            "used_minute":    bm.get("used_minute", 0),
         }
 
     return web.json_response({

@@ -155,6 +155,7 @@ async def get_benchmark(session: AsyncSession, night_id: int, hour: int, day_of_
         "sample_count": len(records),
         "mode":         "hour",
         "used_hour":    used_hour,
+        "used_minute":  records[0].recorded_at.minute if records else 0,
     }
 
 

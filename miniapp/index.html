@@ -1117,8 +1117,10 @@ async function loadLive() {
       document.getElementById('bm-delta-boys').innerHTML  = fmtDelta(bm.delta_boys,  bm.signal_boys);
       const DOW_RU = {fri:'пятницам',sat:'субботам',mon:'понедельникам',tue:'вторникам',wed:'средам',thu:'четвергам',sun:'воскресеньям'};
       const usedH = bm.used_hour;
+      const usedM = bm.used_minute ?? 0;
       const curH2 = new Date().getHours();
-      const hourNote = (usedH !== undefined && usedH !== curH2) ? ` · данные за ${String(usedH).padStart(2,'0')}:xx` : '';
+      const timeStr = `${String(usedH).padStart(2,'0')}:${String(usedM).padStart(2,'0')}`;
+      const hourNote = (usedH !== undefined && usedH !== curH2) ? ` · данные за ${timeStr}` : '';
       document.getElementById('bm-sample').textContent = `Выборка: ${bm.sample_count} ночей по ${DOW_RU[bm.day_of_week]||bm.day_of_week}${hourNote}`;
     } else {
       bmBlock.style.display = 'none';
