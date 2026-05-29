@@ -312,8 +312,15 @@ async def api_kpi(request: web.Request) -> web.Response:
 
 @require_superadmin
 async def api_users_list(request: web.Request) -> web.Response:
+    tg_user = request["tg_user"]
+    requester_id = tg_user.get("id")
     async with AsyncSessionLocal() as session:
         users = await user_repo.get_all(session)
+    # Главный superadmin (SUPERADMIN_ID) скрыт от всех кроме себя
+    filtered = [
+        u for u in users
+        if not (u.telegram_id == settings.SUPERADMIN_ID and requester_id != settings.SUPERADMIN_ID)
+    ]
     return web.json_response({"users": [
         {
             "telegram_id": u.telegram_id,
@@ -321,7 +328,7 @@ async def api_users_list(request: web.Request) -> web.Response:
             "full_name": u.full_name,
             "role": u.role,
             "role_set_at": u.role_set_at.isoformat() if u.role_set_at else None,
-        } for u in users
+        } for u in filtered
     ]})
 
 
@@ -552,23 +559,27 @@ async def api_edit_stat(request: web.Request) -> web.Response:
 @require_auth
 async def api_delete_stat(request: web.Request) -> web.Response:
     """Удаление записи."""
-    tg_user = request["tg_user"]
-    body = await request.json()
-    stat_id = body.get("id")
-    if not stat_id:
-        return web.json_response({"error": "id required"}, status=400)
+    try:
+        tg_user = request["tg_user"]
+        body = await request.json()
+        stat_id = body.get("id")
+        if not stat_id:
+            return web.json_response({"error": "id required"}, status=400)
 
-    async with AsyncSessionLocal() as session:
-        user = await user_repo.get_by_telegram_id(session, tg_user["id"])
-        if not user or user.role not in ("superadmin", "admin"):
-            return web.json_response({"error": "Forbidden"}, status=403)
-        stat = await stats_repo.get_stat_by_id(session, int(stat_id))
-        if not stat:
-            return web.json_response({"error": "Не найдена"}, status=404)
-        await session.delete(stat)
-        await session.commit()
+        async with AsyncSessionLocal() as session:
+            user = await user_repo.get_by_telegram_id(session, tg_user["id"])
+            if not user or user.role not in ("superadmin", "admin"):
+                return web.json_response({"error": "Forbidden"}, status=403)
+            stat = await stats_repo.get_stat_by_id(session, int(stat_id))
+            if not stat:
+                return web.json_response({"error": "Не найдена"}, status=404)
+            session.delete(stat)
+            await session.commit()
 
-    return web.json_response({"ok": True})
+        return web.json_response({"ok": True})
+    except Exception as e:
+        logger.error("api_delete_stat error: %s", e)
+        return web.json_response({"error": str(e)}, status=500)
 
 
 @require_auth

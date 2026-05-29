@@ -144,6 +144,8 @@ async def init_db() -> None:
         ("target_girls_pct","55"),
         ("target_fc_pct",   "90"),
         ("club_name",       "KIKI"),
+        ("occ_green",       "100"),
+        ("occ_orange",      "70"),
     ]
     async with factory() as session:
         for key, val in defaults:

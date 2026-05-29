@@ -677,6 +677,14 @@
               <div class="edit-label">🎯 Цель FC %</div>
               <input class="edit-input" id="set-fc-pct" type="number" inputmode="numeric" min="1" max="100" placeholder="90">
             </div>
+            <div class="edit-field">
+              <div class="edit-label">🟢 Зелёный от %</div>
+              <input class="edit-input" id="set-occ-green" type="number" inputmode="numeric" min="1" max="100" placeholder="100">
+            </div>
+            <div class="edit-field">
+              <div class="edit-label">🟠 Оранжевый от %</div>
+              <input class="edit-input" id="set-occ-orange" type="number" inputmode="numeric" min="1" max="100" placeholder="70">
+            </div>
           </div>
           <button class="btn-primary" onclick="saveGoals()" style="margin-top:4px;">Сохранить настройки</button>
         </div>
@@ -994,7 +1002,7 @@ function deepMerge(target, ...sources) {
 }
 
 // ─── Live ─────────────────────────────────────────────
-let _settings = { max_capacity:'200', target_girls_pct:'55', target_fc_pct:'90', club_name:'KIKI' };
+let _settings = { max_capacity:'200', target_girls_pct:'55', target_fc_pct:'90', club_name:'KIKI', occ_green:'100', occ_orange:'70' };
 
 async function loadSettings() {
   try { _settings = await apiFetch('/api/settings'); } catch(e) {}
@@ -1038,9 +1046,13 @@ async function loadLive() {
     document.getElementById('live-denied').textContent       = d.denied         ?? '—';
 
     const cap = parseInt(_settings.max_capacity) || 200;
-    const pct = d.inside ? Math.min(100, Math.round(d.inside/cap*100)) : 0;
-    document.getElementById('live-bar').style.width = pct+'%';
-    document.getElementById('live-pct').textContent = `${pct}% заполнение (макс ${cap} чел)`;
+    const pct = d.inside ? Math.min(200, Math.round(d.inside/cap*100)) : 0;
+    document.getElementById('live-bar').style.width = Math.min(100,pct)+'%';
+    const occGreen  = parseInt(_settings.occ_green)  || 100;
+    const occOrange = parseInt(_settings.occ_orange) || 70;
+    const occColor  = pct >= occGreen ? '#4CAF50' : pct >= occOrange ? '#FF6B00' : '#F44336';
+    const pctEl = document.getElementById('live-pct');
+    pctEl.innerHTML = `<span style="color:${occColor};font-weight:700;font-size:16px;">${pct}%</span> заполнение (макс ${cap} чел)`;
 
     // Doughnut — кто сейчас ВНУТРИ (не вошло за всё время)
     mkDoughnut('live-ratio-chart', d.girls_inside||0, d.boys_inside||0, 'live-ratio-pct', 'live-ratio-abs');
@@ -1261,6 +1273,8 @@ async function loadGoals() {
   document.getElementById('set-capacity').value   = _settings.max_capacity    || '200';
   document.getElementById('set-girls-pct').value  = _settings.target_girls_pct|| '55';
   document.getElementById('set-fc-pct').value     = _settings.target_fc_pct   || '90';
+  document.getElementById('set-occ-green').value  = _settings.occ_green       || '100';
+  document.getElementById('set-occ-orange').value = _settings.occ_orange      || '70';
 }
 
 async function saveGoals() {
@@ -1269,6 +1283,8 @@ async function saveGoals() {
     max_capacity:     document.getElementById('set-capacity').value,
     target_girls_pct: document.getElementById('set-girls-pct').value,
     target_fc_pct:    document.getElementById('set-fc-pct').value,
+    occ_green:        document.getElementById('set-occ-green').value,
+    occ_orange:       document.getElementById('set-occ-orange').value,
   };
   try {
     const res = await apiFetch('/api/settings', 'POST', body);
