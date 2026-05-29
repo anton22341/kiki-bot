@@ -2,10 +2,12 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
 
-def admin_menu(webapp_url: str = "") -> ReplyKeyboardMarkup:
+def admin_menu(webapp_url: str = "", is_superadmin: bool = False) -> ReplyKeyboardMarkup:
     buttons = [[KeyboardButton(text="📊 Ввести данные")]]
     if webapp_url:
         buttons[0].append(KeyboardButton(text="🌐 Открыть Mini App", web_app=WebAppInfo(url=webapp_url)))
+    if is_superadmin:
+        buttons.append([KeyboardButton(text="📋 Отчёт")])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 

@@ -20,12 +20,13 @@ ALLOWED_ROLES = {"superadmin", "admin"}
 
 
 class InputStats(StatesGroup):
-    girls    = State()
-    boys     = State()
-    left     = State()
-    denied   = State()
-    confirm  = State()
-    fix_time = State()
+    girls      = State()
+    boys       = State()
+    girls_left = State()
+    boys_left  = State()
+    denied     = State()
+    confirm    = State()
+    fix_time   = State()
 
 
 def _get_night_date(dt: datetime) -> str:
@@ -115,12 +116,12 @@ async def fsm_boys(message: Message, state: FSMContext, role: str) -> None:
         await message.answer("Введи число.")
         return
     await state.update_data(boys=val)
-    await state.set_state(InputStats.left)
-    await message.answer("Сколько человек ушло?")
+    await state.set_state(InputStats.girls_left)
+    await message.answer("Сколько девушек ушло за этот час?")
 
 
-@router.message(InputStats.left)
-async def fsm_left(message: Message, state: FSMContext, role: str) -> None:
+@router.message(InputStats.girls_left)
+async def fsm_girls_left(message: Message, state: FSMContext, role: str) -> None:
     if role not in ALLOWED_ROLES:
         return
     try:
@@ -128,7 +129,21 @@ async def fsm_left(message: Message, state: FSMContext, role: str) -> None:
     except ValueError:
         await message.answer("Введи число.")
         return
-    await state.update_data(left=val)
+    await state.update_data(girls_left=val)
+    await state.set_state(InputStats.boys_left)
+    await message.answer("Сколько парней ушло за этот час?")
+
+
+@router.message(InputStats.boys_left)
+async def fsm_boys_left(message: Message, state: FSMContext, role: str) -> None:
+    if role not in ALLOWED_ROLES:
+        return
+    try:
+        val = int(message.text.strip())
+    except ValueError:
+        await message.answer("Введи число.")
+        return
+    await state.update_data(boys_left=val)
     await state.set_state(InputStats.denied)
     await message.answer("Сколько отказано на входе?")
 
@@ -149,7 +164,8 @@ async def fsm_denied(message: Message, state: FSMContext, role: str) -> None:
     await state.set_data(data)
     await state.set_state(InputStats.confirm)
 
-    card = format_stat_card(data["girls"], data["boys"], data["left"], val, now.strftime("%H:%M"), False)
+    left = data.get("girls_left", 0) + data.get("boys_left", 0)
+    card = format_stat_card(data["girls"], data["boys"], left, val, now.strftime("%H:%M"), False)
     await message.answer(card, reply_markup=confirm_stat_kb())
 
 
@@ -360,6 +376,34 @@ async def cmd_edit(message: Message, role: str, user: User) -> None:
                 await message.bot.send_message(recipient.telegram_id, notif)
             except Exception:
                 pass
+
+
+@router.message(F.text == "📋 Отчёт")
+async def btn_report(callback_or_msg: Message, role: str) -> None:
+    if role != "superadmin":
+        return
+    async with AsyncSessionLocal() as session:
+        night = await stats_service.get_current_night(session)
+        if not night:
+            await callback_or_msg.answer("Нет активной ночи.")
+            return
+        inside  = await stats_service.get_live_occupancy(session, night.id)
+        split   = await stats_service.get_live_split(session, night.id)
+        fc      = await stats_service.get_fc_conversion(session, night.id)
+        peak_t, peak_v = await stats_service.get_peak_hour(session, night.id)
+        stats   = await stats_repo.get_night_stats(session, night.id)
+        g_ent   = sum(s.girls_entered for s in stats)
+        b_ent   = sum(s.boys_entered  for s in stats)
+        g_left  = sum(s.girls_left or 0 for s in stats)
+        b_left  = sum(s.boys_left  or 0 for s in stats)
+        denied  = sum(s.denied for s in stats)
+    from bot.messages import format_live_report
+    report = format_live_report(
+        inside=inside, girls_inside=split["girls_inside"], boys_inside=split["boys_inside"],
+        girls_entered=g_ent, boys_entered=b_ent, girls_left=g_left, boys_left=b_left,
+        denied=denied, fc=fc, peak_time=peak_t, peak_val=peak_v,
+    )
+    await callback_or_msg.answer(report)
 
 
 @router.message(Command("status"))

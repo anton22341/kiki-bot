@@ -16,7 +16,7 @@ router = Router()
 async def cmd_start(message: Message, user: User, role: str) -> None:
     text = format_start(user)
     if role in ("admin", "superadmin"):
-        kb = admin_menu(settings.WEBAPP_URL)
+        kb = admin_menu(settings.WEBAPP_URL, is_superadmin=(role == "superadmin"))
         await message.answer(text, reply_markup=kb)
     elif role == "owner":
         await message.answer(text, reply_markup=owner_menu())
