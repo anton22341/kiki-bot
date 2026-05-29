@@ -633,5 +633,35 @@ curl -X POST https://web-production-5d05b.up.railway.app/api/admin/import-histor
 
 ---
 
-_BRAIN.md v1.0 · KIKI Night Club Analytics_
+## Этап 12 — Фиксы аналитики Live (2026-05-29)
+
+**Статус:** `[x]`
+**Коммит:** c09ccbb
+**Деплой:** Railway (auto, push → main)
+
+### Что исправлено
+
+**Benchmark блок ("В это же время обычно"):**
+- Было: при отсутствии данных за текущий час — fallback на итоги всей ночи (показывало ~620/387 = бессмысленно)
+- Стало: ищет ближайший час с ≥2 историческими записями (±1, ±2, ...)
+- Если подходящий час найден но отличается от текущего — в подписи показывает `· данные за HH:xx`
+- Если данных нет вообще — блок скрыт (return None)
+- `used_hour` добавлен в API-ответ `/api/live` → `bm_data`
+
+**Круговая диаграмма Ж/М в Live:**
+- Было: если `girls_inside`/`boys_inside` = 0 — `mkDoughnut` возвращал без рендера, оставался только текст
+- Стало: fallback на `girls_entered`/`boys_entered` (кто вошёл за ночь), диаграмма всегда рисуется при наличии данных
+
+**Стейл-чарт после удаления записи:**
+- Было: удаление записи → `loadLive()` → `hourly.length=0` → `if (hasData)` пропускается → старый Chart.js инстанс остаётся
+- Стало: при `!hasData` явный `charts['live-chart'].destroy()` + `delete charts['live-chart']`
+
+### Файлы изменены
+- `services/stats_service.py` — `get_benchmark()`: убран night-fallback, добавлен поиск ближайшего часа + `used_hour` в возврат
+- `api_server.py` — `used_hour` пробрасывается в `bm_data`
+- `miniapp/index.html` — doughnut fallback, stale-chart fix, подпись `used_hour` в benchmark
+
+---
+
+_BRAIN.md v1.1 · KIKI Night Club Analytics_
 _Обновляй после каждого этапа_
