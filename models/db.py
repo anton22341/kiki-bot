@@ -80,37 +80,18 @@ _factory = None
 
 def _make_engine():
     from config import settings
-    from sqlalchemy.engine import URL as SAUrl
     raw = settings.DB_URL
-    is_pg = "postgresql" in raw
 
-    if not is_pg:
+    if "postgresql" not in raw:
         return create_async_engine(raw, echo=False)
 
-    # Парсим URL вручную чтобы asyncpg получил чистые значения (без URL-encoding проблем)
-    import urllib.parse as up
-    parsed = up.urlparse(raw)
-    host   = parsed.hostname
-    port   = parsed.port or 6543
-    dbname = parsed.path.lstrip("/")
-    user   = up.unquote(parsed.username or "")
-    pwd    = up.unquote(parsed.password or "")
-    use_ssl = "ssl" in raw or port in (5432, 6543)
-
-    # Для Supabase pooler строим URL без пароля в строке
-    base_url = f"postgresql+asyncpg://{host}:{port}/{dbname}"
-
-    connect_args: dict = {"user": user, "password": pwd, "statement_cache_size": 0}
-    if use_ssl:
-        import ssl as ssl_mod
-        ctx = ssl_mod.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl_mod.CERT_NONE
-        connect_args["ssl"] = ctx
+    # Конвертируем postgresql:// → postgresql+asyncpg://
+    url = raw.replace("postgresql://", "postgresql+asyncpg://", 1)
+    url = url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
 
     return create_async_engine(
-        base_url,
-        connect_args=connect_args,
+        url,
+        connect_args={"ssl": "require", "statement_cache_size": 0},
         pool_size=5,
         max_overflow=10,
         pool_pre_ping=True,
