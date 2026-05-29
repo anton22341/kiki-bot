@@ -566,17 +566,15 @@ async def api_delete_stat(request: web.Request) -> web.Response:
         if not stat_id:
             return web.json_response({"error": "id required"}, status=400)
 
+        from sqlalchemy import delete as sa_delete
+        from models.db import HourlyStat
         async with AsyncSessionLocal() as session:
-            user = await user_repo.get_by_telegram_id(session, tg_user["id"])
-            if not user or user.role not in ("superadmin", "admin"):
-                return web.json_response({"error": "Forbidden"}, status=403)
-            stat = await stats_repo.get_stat_by_id(session, int(stat_id))
-            if not stat:
-                return web.json_response({"error": "Не найдена"}, status=404)
-            from sqlalchemy import delete as sa_delete
-            from models.db import HourlyStat
-            await session.execute(sa_delete(HourlyStat).where(HourlyStat.id == int(stat_id)))
+            result = await session.execute(
+                sa_delete(HourlyStat).where(HourlyStat.id == int(stat_id))
+            )
             await session.commit()
+            if result.rowcount == 0:
+                return web.json_response({"error": "Не найдена"}, status=404)
 
         return web.json_response({"ok": True})
     except Exception as e:
