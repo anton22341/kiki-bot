@@ -80,7 +80,8 @@ _factory = None
 
 def _make_engine():
     from config import settings
-    raw = settings.DB_URL
+    # Railway PostgreSQL имеет приоритет если установлен
+    raw = settings.DATABASE_URL or settings.DB_URL
 
     if "postgresql" not in raw:
         return create_async_engine(raw, echo=False)
