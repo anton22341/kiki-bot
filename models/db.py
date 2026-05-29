@@ -100,7 +100,7 @@ def _make_engine():
     # Для Supabase pooler строим URL без пароля в строке
     base_url = f"postgresql+asyncpg://{host}:{port}/{dbname}"
 
-    connect_args: dict = {"user": user, "password": pwd}
+    connect_args: dict = {"user": user, "password": pwd, "statement_cache_size": 0}
     if use_ssl:
         import ssl as ssl_mod
         ctx = ssl_mod.create_default_context()
