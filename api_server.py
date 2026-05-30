@@ -442,7 +442,10 @@ async def api_input(request: web.Request) -> web.Response:
             girls_left = round(left_total * 0.5)
             boys_left  = left_total - girls_left
         denied = int(body.get("denied", 0))
-        recorded_at = datetime.fromisoformat(body["recorded_at"].replace("Z", "+00:00")).replace(tzinfo=None)
+        from datetime import timezone, timedelta as _td
+        _MSK = timezone(_td(hours=3))
+        recorded_at = datetime.fromisoformat(body["recorded_at"].replace("Z", "+00:00"))
+        recorded_at = recorded_at.astimezone(_MSK).replace(tzinfo=None)
         is_manual = bool(body.get("is_manual_time", False))
     except Exception as e:
         return web.json_response({"error": f"Bad data: {e}"}, status=400)
