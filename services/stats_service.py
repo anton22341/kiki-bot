@@ -112,10 +112,8 @@ def compute_night_stats(stats: list) -> dict:
 
 
 async def get_current_night(session: AsyncSession) -> Optional[ClubNight]:
-    """Возвращает текущую открытую ночь. С 08:00 до 20:00 МСК — None (клуб закрыт)."""
-    now = now_msk()
-    if 8 <= now.hour < 20:
-        return None
+    """Возвращает текущую открытую ночь (closed_at IS NULL).
+    Нет ограничений по времени — показываем всё что есть в БД."""
     return await stats_repo.get_current_night(session)
 
 
