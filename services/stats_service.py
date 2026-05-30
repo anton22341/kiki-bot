@@ -57,8 +57,11 @@ def compute_night_stats(stats: list) -> dict:
             for s in stats
         ]
     else:
-        # Накопительные данные — берём последнюю запись как итог
-        last             = stats[-1]
+        # Накопительные данные — счётчик только растёт,
+        # поэтому сортируем по значению счётчика (надёжнее чем по времени,
+        # т.к. 23:55 может оказаться позже 02:00 при одной дате)
+        sorted_stats = sorted(stats, key=lambda s: s.girls_entered + s.boys_entered)
+        last             = sorted_stats[-1]
         total_girls      = last.girls_entered
         total_boys       = last.boys_entered
         total_denied     = last.denied
@@ -66,15 +69,15 @@ def compute_night_stats(stats: list) -> dict:
         total_boys_left  = last.boys_left  or 0
         total_left       = last.left_count
 
-        # Почасовые дельты
+        # Почасовые дельты в порядке роста счётчика
         hourly = []
         prev_g = prev_b = prev_gl = prev_bl = prev_l = 0
-        for s in stats:
-            dg  = max(0, s.girls_entered  - prev_g)
-            db  = max(0, s.boys_entered   - prev_b)
-            dgl = max(0, (s.girls_left or 0) - prev_gl)
-            dbl = max(0, (s.boys_left  or 0) - prev_bl)
-            dl  = max(0, s.left_count     - prev_l)
+        for s in sorted_stats:
+            dg  = max(0, s.girls_entered       - prev_g)
+            db  = max(0, s.boys_entered        - prev_b)
+            dgl = max(0, (s.girls_left or 0)   - prev_gl)
+            dbl = max(0, (s.boys_left  or 0)   - prev_bl)
+            dl  = max(0, s.left_count          - prev_l)
             hourly.append({
                 "time":    s.recorded_at.strftime("%H:%M"),
                 "entered": dg + db,
