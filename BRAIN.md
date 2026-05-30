@@ -23,21 +23,25 @@
 
 ## Состояние проекта
 
-**Текущий этап:** завершён (все 10 этапов)
-**Последнее обновление:** 2026-05-29
-**Общий статус:** 🟢 готово к запуску
+**Текущий этап:** 14 (UX benchmark блока)
+**Последнее обновление:** 2026-05-30
+**Общий статус:** 🟡 в работе
 
 ```
-Этап 1 — Модели и БД          [x] готово
-Этап 2 — Конфиг               [x] готово
-Этап 3 — Репозитории          [x] готово
-Этап 4 — Auth middleware       [x] готово
-Этап 5 — Common + Superadmin   [x] готово
-Этап 6 — Admin: ввод данных   [x] готово
-Этап 7 — Stats service + live  [x] готово
-Этап 8 — Report service        [x] готово
-Этап 9 — Scheduler             [x] готово
+Этап 1  — Модели и БД          [x] готово
+Этап 2  — Конфиг               [x] готово
+Этап 3  — Репозитории          [x] готово
+Этап 4  — Auth middleware       [x] готово
+Этап 5  — Common + Superadmin   [x] готово
+Этап 6  — Admin: ввод данных   [x] готово
+Этап 7  — Stats service + live  [x] готово
+Этап 8  — Report service        [x] готово
+Этап 9  — Scheduler             [x] готово
 Этап 10 — Mini App             [x] готово
+Этап 11 — Исторические данные  [x] готово
+Этап 12 — Фиксы Live           [x] готово
+Этап 13 — Накопительный ввод   [x] готово
+Этап 14 — UX benchmark         [~] в процессе
 ```
 
 ---
@@ -633,6 +637,29 @@ curl -X POST https://web-production-5d05b.up.railway.app/api/admin/import-histor
 
 ---
 
+## Этап 14 — UX benchmark блока (2026-05-30)
+
+**Статус:** `[~]` в процессе
+**Коммит до изменений:** 9964f41
+
+### Проблема
+Блок "В это же время обычно" и % под карточками "Внутри" вводят в заблуждение:
+- Карточка показывает "Внутри: 189" (накопленный inside)
+- Но % под ней сравнивает ПОТОК за последний час (дельта) с историческим avg
+- Пользователь видит 189 и -6% avg 106 → думает 189 сравнивается с 106 (нет!)
+
+### Что нужно сделать
+- Убрать мини-benchmark (live-bm-inside, live-bm-girls, live-bm-boys) из карточек "Внутри"
+- Оставить только блок "В это же время обычно" внизу, с чётким заголовком что именно сравнивается
+
+### ОТКАТ (если что-то пойдёт не так)
+```bash
+git reset --hard 9964f41
+git push --force origin main
+```
+
+---
+
 ## Этап 13 — Переход на накопительный ввод (2026-05-30)
 
 **Статус:** `[x]` готово
@@ -649,6 +676,16 @@ curl -X POST https://web-production-5d05b.up.railway.app/api/admin/import-histor
 - `api_server.py` — все эндпоинты использовать `compute_night_stats()`
 - Live: сброс в 8:00 МСК (не показывать ночь прошлого дня)
 - Ночь: починить стрелки навигации (перепутаны onclick +1/-1)
+
+### Все коммиты этапа 13
+```
+9964f41 Remove misleading + sign from history entries
+3636f2b Fix compute_night_stats: sort by counter value not timestamp
+a08375c Remove time-based restriction from get_current_night
+5ec26a8 Fix timezone: convert recorded_at from UTC to MSK
+5cfc552 Fix report_service and owner.py to use compute_night_stats()
+8e0a017 Stage 13: cumulative input logic, night nav fix
+```
 
 ### Что сделано
 - `stats_service.py` — добавлен `compute_night_stats()`: автоопределение режима
