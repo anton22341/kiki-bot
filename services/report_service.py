@@ -2,11 +2,11 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 from utils.time import now_msk
-from models.db import ClubNight, HourlyStat, EditLog, User
+from models.db import ClubNight, HourlyStat, EditLog
 from repositories import stats_repo
-from services.stats_service import calc_deviation, get_historical_avg
+from services.stats_service import compute_night_stats, get_benchmark, _emoji, _signal
 from bot.messages import progress_bar
 
 logger = logging.getLogger(__name__)
@@ -16,12 +16,15 @@ MONTH_RU = {
     5: "Май", 6: "Июнь", 7: "Июль", 8: "Август",
     9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь",
 }
-
+MONTH_SHORT = {
+    1: "Янв", 2: "Фев", 3: "Мар", 4: "Апр", 5: "Май", 6: "Июн",
+    7: "Июл", 8: "Авг", 9: "Сен", 10: "Окт", 11: "Ноя", 12: "Дек",
+}
 WEEKDAY_RU = {"mon": "Пн", "tue": "Вт", "wed": "Ср", "thu": "Чт", "fri": "Пт", "sat": "Сб", "sun": "Вс"}
+CLUB_DAYS = ("fri", "sat")
 
 
 async def build_night_report(session: AsyncSession, night_id: int) -> str:
-    from sqlalchemy import select
     result = await session.execute(select(ClubNight).where(ClubNight.id == night_id))
     night = result.scalar_one_or_none()
     if not night:
@@ -31,65 +34,66 @@ async def build_night_report(session: AsyncSession, night_id: int) -> str:
     if not stats:
         return "Данных за эту ночь нет."
 
-    total_entered = sum(s.girls_entered + s.boys_entered for s in stats)
-    total_left = sum(s.left_count for s in stats)
-    total_denied = sum(s.denied for s in stats)
-    total_girls = sum(s.girls_entered for s in stats)
-    total_boys = sum(s.boys_entered for s in stats)
-    inside = max(0, total_entered - total_left)
-    peak_stat = max(stats, key=lambda s: s.girls_entered + s.boys_entered)
-    peak_val = peak_stat.girls_entered + peak_stat.boys_entered
-    peak_time = peak_stat.recorded_at.strftime("%H:%M")
+    ns = compute_night_stats(stats)
+    total    = ns["total"]
+    denied   = ns["total_denied"]
+    inside   = ns["inside"]
+    hourly   = ns["hourly"]
 
-    fc = round(total_entered / (total_entered + total_denied) * 100) if (total_entered + total_denied) > 0 else 0
-    avg_occ = round(total_entered / len(stats)) if stats else 0
-    ratio_g = round(total_girls / total_entered * 100) if total_entered > 0 else 0
+    fc      = round(total / (total + denied) * 100) if (total + denied) > 0 else 0
+    avg_occ = round(total / len(hourly)) if hourly else 0
+    ratio_g = round(ns["total_girls"] / total * 100) if total > 0 else 0
+
+    peak_h  = max(hourly, key=lambda h: h["entered"]) if hourly else None
+    peak_val  = peak_h["entered"] if peak_h else 0
+    peak_time = peak_h["time"]    if peak_h else "—"
 
     try:
         night_dt = datetime.strptime(night.date, "%Y-%m-%d")
-        date_str = f"{WEEKDAY_RU.get(night.day_of_week, '')} {night_dt.day} {list(MONTH_RU.values())[night_dt.month - 1]}"
+        date_str = f"{WEEKDAY_RU.get(night.day_of_week, '')} {night_dt.day} {MONTH_SHORT.get(night_dt.month, '')}"
     except Exception:
         date_str = night.date
 
     lines = [f"📊 Итог ночи · {date_str}\n"]
-    lines.append(f"Вошло всего:   {total_entered}")
+    lines.append(f"Вошло всего:   {total}")
     lines.append(f"Пик:           {peak_val} чел ({peak_time})")
     lines.append(f"Внутри сейчас: {inside}")
     lines.append(f"\n👧 Девушки: {ratio_g}%  👦 Парни: {100 - ratio_g}%")
     lines.append(f"🎯 FC конверсия: {fc}%")
-    lines.append(f"⏱ Avg occupancy: {avg_occ} чел")
+    lines.append(f"⏱ Avg за час: {avg_occ} чел")
     lines.append("\nПочасовой трафик:")
 
-    max_val = max(s.girls_entered + s.boys_entered for s in stats)
-    from services.stats_service import get_benchmark, _emoji
-    for s in stats:
-        entered = s.girls_entered + s.boys_entered
+    max_val = max((h["entered"] for h in hourly), default=1)
+    for h in hourly:
+        entered = h["entered"]
         bar = progress_bar(entered, max_val, 8)
-        bm = await get_benchmark(session, night.id, s.recorded_at.hour, night.day_of_week)
-        avg_total = bm.get("avg_total", 0) if bm else 0
-        if bm and avg_total > 0:
-            d = round((entered / avg_total - 1) * 100)
-            delta_str = f" {_emoji('green' if d > 15 else 'red' if d < -15 else 'orange')}{'+' if d >= 0 else ''}{d}%"
+        bm = await get_benchmark(session, night.id, int(h["time"].split(":")[0]), night.day_of_week)
+        avg_t = bm.get("avg_total", 0) if bm else 0
+        if bm and avg_t > 0:
+            d = round((entered / avg_t - 1) * 100)
+            delta_str = f" {_emoji(_signal(d))}{'+' if d >= 0 else ''}{d}%"
         else:
-            delta_str = " (сейчас)" if not night.closed_at and s == stats[-1] else ""
-        lines.append(f"{s.recorded_at.strftime('%H:%M')}  {bar} {entered}{delta_str}")
+            delta_str = " (сейчас)" if not night.closed_at and h == hourly[-1] else ""
+        lines.append(f"{h['time']}  {bar} {entered}{delta_str}")
 
-    # Benchmark итог за ночь
-    bm_night = await get_benchmark(session, night.id, 0, night.day_of_week)
-    if bm_night and bm_night.get("avg_total", 0) > 0:
-        d_night = round((total_entered / bm_night["avg_total"] - 1) * 100)
-        em = _emoji("green" if d_night > 15 else "red" if d_night < -15 else "orange")
-        lines.append(f"\n{em} vs исторический avg ({night.day_of_week}): {'+' if d_night >= 0 else ''}{d_night}%")
+    # Benchmark итог: сравниваем последний час с историческим
+    if hourly:
+        last_h = hourly[-1]
+        last_hour = int(last_h["time"].split(":")[0])
+        bm_last = await get_benchmark(session, night.id, last_hour, night.day_of_week)
+        if bm_last and bm_last.get("avg_total", 0) > 0:
+            d_last = round((last_h["entered"] / bm_last["avg_total"] - 1) * 100)
+            em = _emoji(_signal(d_last))
+            lines.append(
+                f"\n{em} Последний час vs история ({night.day_of_week}): "
+                f"{'+' if d_last >= 0 else ''}{d_last}%"
+            )
 
     return "\n".join(lines)
 
 
-CLUB_DAYS = ("fri", "sat")  # клуб работает только пт и сб
-
-
 async def build_week_report(session: AsyncSession) -> str:
     now = now_msk()
-    # Ищем последние 2 рабочих уик-энда (8 последних ночей — с запасом)
     week_ago = now - timedelta(days=14)
     result = await session.execute(
         select(ClubNight)
@@ -109,7 +113,8 @@ async def build_week_report(session: AsyncSession) -> str:
 
     for night in nights:
         stats = await stats_repo.get_night_stats(session, night.id)
-        entered = sum(s.girls_entered + s.boys_entered for s in stats)
+        ns = compute_night_stats(stats)
+        entered = ns["total"]
         total += entered
         if entered > best_count:
             best_count = entered
@@ -119,8 +124,8 @@ async def build_week_report(session: AsyncSession) -> str:
             max_n = entered
 
     start = datetime.strptime(nights[0].date, "%Y-%m-%d")
-    end = datetime.strptime(nights[-1].date, "%Y-%m-%d")
-    date_range = f"{start.day}–{end.day} {list(MONTH_RU.values())[end.month - 1]}"
+    end   = datetime.strptime(nights[-1].date, "%Y-%m-%d")
+    date_range = f"{start.day}–{end.day} {MONTH_SHORT.get(end.month, '')}"
 
     lines = [f"📅 Последние ночи · {date_range}\n(только Пт и Сб)\n"]
     lines.append(f"Ночей: {len(nights)}  |  Посетителей: {total}")
@@ -155,7 +160,8 @@ async def build_month_report(session: AsyncSession) -> str:
     best_count = 0
     for night in nights:
         stats = await stats_repo.get_night_stats(session, night.id)
-        entered = sum(s.girls_entered + s.boys_entered for s in stats)
+        ns = compute_night_stats(stats)
+        entered = ns["total"]
         totals.append(entered)
         if entered > best_count:
             best_count = entered
@@ -190,22 +196,22 @@ async def build_kpi_report(session: AsyncSession) -> str:
 
     for night in nights:
         stats = await stats_repo.get_night_stats(session, night.id)
-        for s in stats:
-            entered = s.girls_entered + s.boys_entered
-            total_entered += entered
-            total_g += s.girls_entered
-            total_b += s.boys_entered
-            total_denied += s.denied
-            h = s.recorded_at.hour
-            peak_hour_counts[h] = peak_hour_counts.get(h, 0) + entered
+        ns = compute_night_stats(stats)
+        total_entered += ns["total"]
+        total_g       += ns["total_girls"]
+        total_b       += ns["total_boys"]
+        total_denied  += ns["total_denied"]
+        for h in ns["hourly"]:
+            hour = int(h["time"].split(":")[0])
+            peak_hour_counts[hour] = peak_hour_counts.get(hour, 0) + h["entered"]
 
-    fc = round(total_entered / (total_entered + total_denied) * 100) if (total_entered + total_denied) > 0 else 0
+    fc      = round(total_entered / (total_entered + total_denied) * 100) if (total_entered + total_denied) > 0 else 0
     ratio_g = round(total_g / total_entered * 100) if total_entered > 0 else 0
 
-    fc_ok = "✅" if fc >= 90 else "⚠️"
+    fc_ok    = "✅" if fc >= 90 else "⚠️"
     ratio_ok = "✅" if ratio_g >= 55 else "⚠️"
 
-    peak_h = max(peak_hour_counts, key=peak_hour_counts.get) if peak_hour_counts else None
+    peak_h   = max(peak_hour_counts, key=peak_hour_counts.get) if peak_hour_counts else None
     peak_str = f"{peak_h:02d}:00 — {(peak_h + 1) % 24:02d}:00" if peak_h is not None else "—"
 
     month_name = MONTH_RU.get(now.month, "")
@@ -224,13 +230,15 @@ async def build_hourly_report(session: AsyncSession, night: ClubNight) -> str:
     if not stats:
         return ""
 
-    now = now_msk()
-    last = stats[-1]
-    hour_entered = last.girls_entered + last.boys_entered
-    hour_left = last.left_count
-    inside = await get_live_occupancy(session, night.id)
+    ns   = compute_night_stats(stats)
+    now  = now_msk()
+    last_h = ns["hourly"][-1] if ns["hourly"] else None
+    hour_entered = last_h["entered"] if last_h else 0
+    hour_left    = last_h["left"]    if last_h else 0
+    inside       = ns["inside"]
+
     hist_avg = await get_historical_avg(session, now.hour, night.day_of_week)
-    dev = calc_deviation(inside, hist_avg)
+    dev = calc_deviation(hour_entered, hist_avg)
     dev_str = f"{dev:+.0f}% 📈" if dev > 0 else f"{dev:.0f}% 📉" if dev < 0 else "—"
 
     return (
@@ -242,7 +250,6 @@ async def build_hourly_report(session: AsyncSession, night: ClubNight) -> str:
 
 
 async def build_edit_logs_report(session: AsyncSession, limit: int = 10) -> str:
-    from sqlalchemy.orm import joinedload
     logs = await stats_repo.get_edit_logs(session, limit)
     if not logs:
         return "📝 Изменений нет."

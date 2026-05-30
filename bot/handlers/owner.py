@@ -29,20 +29,22 @@ async def cmd_live(message: Message, role: str) -> None:
         now = now_msk()
         cur_hour = now.hour
 
-        inside = await stats_service.get_live_occupancy(session, night.id)
-        split  = await stats_service.get_live_split(session, night.id)
-        peak_time, peak_val = await stats_service.get_peak_hour(session, night.id)
-        fc = await stats_service.get_fc_conversion(session, night.id)
-
         stats = await stats_repo.get_night_stats(session, night.id)
-        total_girls  = sum(s.girls_entered for s in stats)
-        total_boys   = sum(s.boys_entered  for s in stats)
-        total_left   = sum(s.left_count    for s in stats)
-        total_denied = sum(s.denied        for s in stats)
-
-        bm = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
+        ns    = stats_service.compute_night_stats(stats)
+        bm    = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
 
     from bot.messages import progress_bar
+    inside       = ns["inside"]
+    total_girls  = ns["total_girls"]
+    total_boys   = ns["total_boys"]
+    total_denied = ns["total_denied"]
+    hourly       = ns["hourly"]
+    last_h       = hourly[-1] if hourly else None
+    peak_h       = max(hourly, key=lambda h: h["entered"]) if hourly else None
+    peak_time    = peak_h["time"]    if peak_h else "—"
+    peak_val     = peak_h["entered"] if peak_h else 0
+    fc           = round(ns["total"] / (ns["total"] + total_denied) * 100) if (ns["total"] + total_denied) > 0 else 0
+
     capacity = 200
     bar = progress_bar(inside, capacity, 15)
     pct = round(inside / capacity * 100)
@@ -58,9 +60,12 @@ async def cmd_live(message: Message, role: str) -> None:
         em = stats_service._emoji(stats_service._signal(d))
         return f" {em} {'+' if d >= 0 else ''}{d}% vs avg"
 
-    girls_delta = fmt_delta(total_girls, bm["avg_girls"])  if bm else ""
-    boys_delta  = fmt_delta(total_boys,  bm["avg_boys"])   if bm else ""
-    total_delta = fmt_delta(total_girls + total_boys, bm["avg_total"]) if bm else ""
+    # Для бенчмарка сравниваем дельту последнего часа, не накопленный итог
+    last_g = last_h["girls"]   if last_h else 0
+    last_b = last_h["boys"]    if last_h else 0
+    girls_delta = fmt_delta(last_g,         bm["avg_girls"]) if bm else ""
+    boys_delta  = fmt_delta(last_b,         bm["avg_boys"])  if bm else ""
+    total_delta = fmt_delta(last_g + last_b, bm["avg_total"]) if bm else ""
 
     text = (
         f"🟢 KIKI — Live сейчас\n\n"
@@ -74,9 +79,10 @@ async def cmd_live(message: Message, role: str) -> None:
         f"🎯 FC конверсия: {fc}%\n"
     )
     if bm:
-        mode_str = f"в {cur_hour:02d}:00" if bm.get("mode") == "hour" else "за ночь"
         text += (
-            f"\n📊 Ср по {dow_ru.get(night.day_of_week, night.day_of_week)} {mode_str} ({bm['sample_count']} ночей):\n"
+            f"\n📊 Ср по {dow_ru.get(night.day_of_week, night.day_of_week)} "
+            f"в {bm.get('used_hour', cur_hour):02d}:{bm.get('used_minute', 0):02d} "
+            f"({bm['sample_count']} ночей):\n"
             f"   Д: ~{bm['avg_girls']:.0f} | П: ~{bm['avg_boys']:.0f} | Всего: ~{bm['avg_total']:.0f}\n"
         )
     text += f"\n🕐 Обновлено: {now_str}"
