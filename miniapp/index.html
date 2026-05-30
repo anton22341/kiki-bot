@@ -524,28 +524,32 @@
 
       <!-- Benchmark блок -->
       <div class="card" id="live-bm-block" style="display:none">
-        <div class="card-title">📊 Поток за последний час — сравнение с историей</div>
-        <div style="font-size:11px;color:var(--w30);margin-bottom:8px;" id="bm-subtitle">сколько вошло за этот час vs среднее в прошлые недели</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0px;">
-          <div style="text-align:center;flex:1;">
-            <div style="font-size:11px;color:var(--w30);margin-bottom:2px;">Всего</div>
-            <div style="font-size:18px;font-weight:600;" id="bm-avg-total">—</div>
-            <div style="font-size:12px;margin-top:2px;" id="bm-delta-total"></div>
-          </div>
-          <div style="width:1px;background:rgba(255,255,255,0.08);height:40px;"></div>
-          <div style="text-align:center;flex:1;">
-            <div style="font-size:11px;color:var(--w30);margin-bottom:2px;">👧 Девушки</div>
-            <div style="font-size:18px;font-weight:600;" id="bm-avg-girls">—</div>
-            <div style="font-size:12px;margin-top:2px;" id="bm-delta-girls"></div>
-          </div>
-          <div style="width:1px;background:rgba(255,255,255,0.08);height:40px;"></div>
-          <div style="text-align:center;flex:1;">
-            <div style="font-size:11px;color:var(--w30);margin-bottom:2px;">👦 Парни</div>
-            <div style="font-size:18px;font-weight:600;" id="bm-avg-boys">—</div>
-            <div style="font-size:12px;margin-top:2px;" id="bm-delta-boys"></div>
-          </div>
+        <div class="card-title">📊 Поток за последний час</div>
+        <!-- Всего -->
+        <div style="display:flex;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);">
+          <div style="width:52px;font-size:12px;color:var(--w30);">Всего</div>
+          <div style="font-size:17px;font-weight:600;min-width:36px;font-variant-numeric:tabular-nums;" id="bm-cur-total">—</div>
+          <div style="font-size:11px;color:var(--w30);margin:0 6px;">→ avg</div>
+          <div style="font-size:15px;color:var(--w60);min-width:32px;font-variant-numeric:tabular-nums;" id="bm-avg-total">—</div>
+          <div style="font-size:13px;margin-left:auto;" id="bm-delta-total"></div>
         </div>
-        <div style="font-size:10px;color:var(--w30);margin-top:8px;text-align:center;" id="bm-sample"></div>
+        <!-- Девушки -->
+        <div style="display:flex;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);">
+          <div style="width:52px;font-size:12px;color:var(--w30);">👧</div>
+          <div style="font-size:17px;font-weight:600;min-width:36px;font-variant-numeric:tabular-nums;" id="bm-cur-girls">—</div>
+          <div style="font-size:11px;color:var(--w30);margin:0 6px;">→ avg</div>
+          <div style="font-size:15px;color:var(--w60);min-width:32px;font-variant-numeric:tabular-nums;" id="bm-avg-girls">—</div>
+          <div style="font-size:13px;margin-left:auto;" id="bm-delta-girls"></div>
+        </div>
+        <!-- Парни -->
+        <div style="display:flex;align-items:center;padding:8px 0;">
+          <div style="width:52px;font-size:12px;color:var(--w30);">👦</div>
+          <div style="font-size:17px;font-weight:600;min-width:36px;font-variant-numeric:tabular-nums;" id="bm-cur-boys">—</div>
+          <div style="font-size:11px;color:var(--w30);margin:0 6px;">→ avg</div>
+          <div style="font-size:15px;color:var(--w60);min-width:32px;font-variant-numeric:tabular-nums;" id="bm-avg-boys">—</div>
+          <div style="font-size:13px;margin-left:auto;" id="bm-delta-boys"></div>
+        </div>
+        <div style="font-size:10px;color:var(--w30);margin-top:8px;" id="bm-sample"></div>
       </div>
 
       <div class="card">
@@ -1105,12 +1109,15 @@ async function loadLive() {
         const e = SIG_EMOJI2[sig] || '';
         return `<span style="color:${c}">${e} ${d >= 0 ? '+' : ''}${d}%</span>`;
       }
-      document.getElementById('bm-avg-total').textContent = Math.round(bm.avg_total);
-      document.getElementById('bm-avg-girls').textContent = Math.round(bm.avg_girls);
-      document.getElementById('bm-avg-boys').textContent  = Math.round(bm.avg_boys);
-      document.getElementById('bm-delta-total').innerHTML = fmtDelta(bm.delta_total, bm.signal_total);
-      document.getElementById('bm-delta-girls').innerHTML = fmtDelta(bm.delta_girls, bm.signal_girls);
-      document.getElementById('bm-delta-boys').innerHTML  = fmtDelta(bm.delta_boys,  bm.signal_boys);
+      document.getElementById('bm-cur-total').textContent  = bm.cur_total ?? '—';
+      document.getElementById('bm-cur-girls').textContent  = bm.cur_girls ?? '—';
+      document.getElementById('bm-cur-boys').textContent   = bm.cur_boys  ?? '—';
+      document.getElementById('bm-avg-total').textContent  = Math.round(bm.avg_total);
+      document.getElementById('bm-avg-girls').textContent  = Math.round(bm.avg_girls);
+      document.getElementById('bm-avg-boys').textContent   = Math.round(bm.avg_boys);
+      document.getElementById('bm-delta-total').innerHTML  = fmtDelta(bm.delta_total, bm.signal_total);
+      document.getElementById('bm-delta-girls').innerHTML  = fmtDelta(bm.delta_girls, bm.signal_girls);
+      document.getElementById('bm-delta-boys').innerHTML   = fmtDelta(bm.delta_boys,  bm.signal_boys);
       const DOW_RU = {fri:'пятницам',sat:'субботам',mon:'понедельникам',tue:'вторникам',wed:'средам',thu:'четвергам',sun:'воскресеньям'};
       const usedH = bm.used_hour;
       const usedM = bm.used_minute ?? 0;

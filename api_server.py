@@ -123,10 +123,12 @@ async def api_live(request: web.Request) -> web.Response:
         d_girls = delta_pct(cur_g, bm["avg_girls"])
         d_boys  = delta_pct(cur_b, bm["avg_boys"])
         bm_data = {
+            "cur_total":   cur_t,
+            "cur_girls":   cur_g,
+            "cur_boys":    cur_b,
             "avg_total":   bm["avg_total"],
             "avg_girls":   bm["avg_girls"],
             "avg_boys":    bm["avg_boys"],
-            "avg_inside":  0,
             "delta_total": d_total,
             "delta_girls": d_girls,
             "delta_boys":  d_boys,

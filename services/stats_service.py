@@ -206,46 +206,83 @@ async def get_benchmark(session: AsyncSession, night_id: int, hour: int, day_of_
     if len(hist_nights) < 2:
         return None
 
-    # Собираем записи за нужный час из исторических ночей
-    hour_records = []
-    for n in hist_nights:
-        res = await session.execute(
-            select(HourlyStat).where(HourlyStat.night_id == n.id)
-        )
-        for s in res.scalars().all():
-            if s.recorded_at.hour == hour:
-                hour_records.append(s)
+    def _get_hour_delta(night_stats: list, target_hour: int):
+        """
+        Возвращает (girls_delta, boys_denied_delta) для конкретного часа ночи.
+        Для накопительных ночей (is_historical=False) считает дельту между записями.
+        Для исторических (is_historical=True) берёт значение записи напрямую.
+        """
+        if not night_stats:
+            return None
+        is_cumul = not night_stats[0].is_historical
+        if is_cumul:
+            sorted_s = sorted(night_stats, key=lambda s: s.girls_entered + s.boys_entered)
+            for i, s in enumerate(sorted_s):
+                if s.recorded_at.hour == target_hour:
+                    prev = sorted_s[i - 1] if i > 0 else None
+                    pg = prev.girls_entered if prev else 0
+                    pb = prev.boys_entered  if prev else 0
+                    pd = prev.denied        if prev else 0
+                    return {
+                        "girls":  max(0, s.girls_entered - pg),
+                        "boys":   max(0, s.boys_entered  - pb),
+                        "denied": max(0, s.denied        - pd),
+                        "recorded_at": s.recorded_at,
+                    }
+            return None
+        else:
+            for s in night_stats:
+                if s.recorded_at.hour == target_hour:
+                    return {
+                        "girls":  s.girls_entered,
+                        "boys":   s.boys_entered,
+                        "denied": s.denied,
+                        "recorded_at": s.recorded_at,
+                    }
+            return None
 
+    # Загружаем все записи исторических ночей один раз
+    nights_stats: dict[int, list] = {}
+    for n in hist_nights:
+        res = await session.execute(select(HourlyStat).where(HourlyStat.night_id == n.id))
+        nights_stats[n.id] = list(res.scalars().all())
+
+    # Собираем дельты за нужный час
+    def collect_for_hour(target_hour: int) -> list[dict]:
+        result = []
+        for n in hist_nights:
+            d = _get_hour_delta(nights_stats[n.id], target_hour)
+            if d is not None:
+                result.append(d)
+        return result
+
+    hour_records = collect_for_hour(hour)
     records   = hour_records
     used_hour = hour
 
-    # Если меньше 2 записей за этот час — ищем ближайший час с >= 2 записями
+    # Если меньше 2 записей — ищем ближайший час
     if len(records) < 2:
-        all_by_hour: dict[int, list] = {}
-        for n in hist_nights:
-            res = await session.execute(select(HourlyStat).where(HourlyStat.night_id == n.id))
-            for s in res.scalars().all():
-                all_by_hour.setdefault(s.recorded_at.hour, []).append(s)
-
         found_hour = None
         for delta in range(1, 12):
             for candidate in (hour - delta, hour + delta):
                 h = candidate % 24
-                if len(all_by_hour.get(h, [])) >= 2:
+                recs = collect_for_hour(h)
+                if len(recs) >= 2:
                     found_hour = h
+                    records = recs
                     break
             if found_hour is not None:
                 break
+            found_hour = None  # reset inner loop result
 
-        if found_hour is None:
+        if not records or len(records) < 2:
             return None
 
-        records   = all_by_hour[found_hour]
-        used_hour = found_hour
+        used_hour = found_hour if found_hour is not None else hour
 
-    avg_girls  = sum(s.girls_entered for s in records) / len(records)
-    avg_boys   = sum(s.boys_entered  for s in records) / len(records)
-    avg_denied = sum(s.denied        for s in records) / len(records)
+    avg_girls  = sum(r["girls"]  for r in records) / len(records)
+    avg_boys   = sum(r["boys"]   for r in records) / len(records)
+    avg_denied = sum(r["denied"] for r in records) / len(records)
 
     return {
         "avg_girls":    round(avg_girls, 1),
@@ -255,7 +292,7 @@ async def get_benchmark(session: AsyncSession, night_id: int, hour: int, day_of_
         "sample_count": len(records),
         "mode":         "hour",
         "used_hour":    used_hour,
-        "used_minute":  records[0].recorded_at.minute if records else 0,
+        "used_minute":  records[0]["recorded_at"].minute if records else 0,
     }
 
 
