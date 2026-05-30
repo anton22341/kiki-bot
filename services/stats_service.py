@@ -115,9 +115,19 @@ def compute_night_stats(stats: list) -> dict:
 
 
 async def get_current_night(session: AsyncSession) -> Optional[ClubNight]:
-    """Возвращает текущую открытую ночь (closed_at IS NULL).
-    Нет ограничений по времени — показываем всё что есть в БД."""
-    return await stats_repo.get_current_night(session)
+    """Возвращает текущую открытую ночь.
+    Страховка: если ночь открыта, но сейчас 08:00-20:00 МСК и
+    ночь началась до сегодняшних 08:00 — считаем её завершённой."""
+    night = await stats_repo.get_current_night(session)
+    if not night:
+        return None
+    now = now_msk()
+    if 8 <= now.hour < 20:
+        # Проверяем что ночь началась до сегодняшних 8:00
+        today_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        if night.opened_at < today_8am:
+            return None  # планировщик не успел закрыть — игнорируем
+    return night
 
 
 async def get_live_occupancy(session: AsyncSession, night_id: int) -> int:

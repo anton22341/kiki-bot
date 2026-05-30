@@ -31,7 +31,7 @@ class InputStats(StatesGroup):
 
 
 def _get_night_date(dt: datetime) -> str:
-    if dt.hour < 6:
+    if dt.hour < 8:
         return (dt - timedelta(days=1)).strftime("%Y-%m-%d")
     return dt.strftime("%Y-%m-%d")
 

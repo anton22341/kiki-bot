@@ -451,13 +451,13 @@ async def api_input(request: web.Request) -> web.Response:
         return web.json_response({"error": f"Bad data: {e}"}, status=400)
 
     def _night_date(dt: datetime) -> str:
-        if dt.hour < 6:
+        if dt.hour < 8:
             return (dt - timedelta(days=1)).strftime("%Y-%m-%d")
         return dt.strftime("%Y-%m-%d")
 
     def _dow(dt: datetime) -> str:
         keys = ["mon","tue","wed","thu","fri","sat","sun"]
-        d = dt - timedelta(days=1) if dt.hour < 6 else dt
+        d = dt - timedelta(days=1) if dt.hour < 8 else dt
         return keys[d.weekday()]
 
     async with AsyncSessionLocal() as session:
