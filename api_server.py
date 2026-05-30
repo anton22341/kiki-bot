@@ -91,7 +91,10 @@ async def api_live(request: web.Request) -> web.Response:
         stats = await stats_repo.get_night_stats(session, night.id)
         ns    = stats_service.compute_night_stats(stats)
 
-        cur_hour = now_msk().hour
+        # Используем час последней записи, а не реальное время —
+        # так работает правильно и ночью, и при дневном тестировании с ручным временем
+        last_hourly = ns["hourly"][-1] if ns["hourly"] else None
+        cur_hour = int(last_hourly["time"].split(":")[0]) if last_hourly else now_msk().hour
         bm = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
 
     def delta_pct(cur, avg):

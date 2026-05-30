@@ -27,10 +27,10 @@ async def cmd_live(message: Message, role: str) -> None:
             return
 
         now = now_msk()
-        cur_hour = now.hour
-
         stats = await stats_repo.get_night_stats(session, night.id)
         ns    = stats_service.compute_night_stats(stats)
+        last_h_time = ns["hourly"][-1]["time"] if ns["hourly"] else None
+        cur_hour = int(last_h_time.split(":")[0]) if last_h_time else now.hour
         bm    = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
 
     from bot.messages import progress_bar
