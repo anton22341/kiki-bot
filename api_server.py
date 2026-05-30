@@ -88,18 +88,9 @@ async def api_live(request: web.Request) -> web.Response:
                 "left": 0, "denied": 0, "ratio_girls": 0, "hourly": []
             })
 
-        stats  = await stats_repo.get_night_stats(session, night.id)
-        inside = await stats_service.get_live_occupancy(session, night.id)
-        split  = await stats_service.get_live_split(session, night.id)
+        stats = await stats_repo.get_night_stats(session, night.id)
+        ns    = stats_service.compute_night_stats(stats)
 
-        girls_entered = sum(s.girls_entered for s in stats)
-        boys_entered  = sum(s.boys_entered  for s in stats)
-        left          = sum(s.left_count    for s in stats)
-        denied        = sum(s.denied        for s in stats)
-        hourly = [{"time": s.recorded_at.strftime("%H:%M"), "entered": s.girls_entered + s.boys_entered} for s in stats]
-
-        # Benchmark
-        from datetime import datetime as _dt
         cur_hour = now_msk().hour
         bm = await stats_service.get_benchmark(session, night.id, cur_hour, night.day_of_week)
 
@@ -119,38 +110,43 @@ async def api_live(request: web.Request) -> web.Response:
 
     bm_data = None
     if bm:
-        total_now = girls_entered + boys_entered
-        d_total  = delta_pct(total_now,    bm["avg_total"])
-        d_girls  = delta_pct(girls_entered, bm["avg_girls"])
-        d_boys   = delta_pct(boys_entered,  bm["avg_boys"])
-        bm_data  = {
-            "avg_total":      bm["avg_total"],
-            "avg_girls":      bm["avg_girls"],
-            "avg_boys":       bm["avg_boys"],
-            "avg_inside":     bm.get("avg_inside", 0),
-            "delta_total":    d_total,
-            "delta_girls":    d_girls,
-            "delta_boys":     d_boys,
-            "signal_total":   signal(d_total),
-            "signal_girls":   signal(d_girls),
-            "signal_boys":    signal(d_boys),
-            "sample_count":   bm["sample_count"],
-            "day_of_week":    night.day_of_week,
-            "used_hour":      bm.get("used_hour", cur_hour),
-            "used_minute":    bm.get("used_minute", 0),
+        # Сравниваем последний почасовой delta (не накопительный итог)
+        last_h = ns["hourly"][-1] if ns["hourly"] else None
+        cur_g  = last_h["girls"]   if last_h else 0
+        cur_b  = last_h["boys"]    if last_h else 0
+        cur_t  = cur_g + cur_b
+
+        d_total = delta_pct(cur_t, bm["avg_total"])
+        d_girls = delta_pct(cur_g, bm["avg_girls"])
+        d_boys  = delta_pct(cur_b, bm["avg_boys"])
+        bm_data = {
+            "avg_total":   bm["avg_total"],
+            "avg_girls":   bm["avg_girls"],
+            "avg_boys":    bm["avg_boys"],
+            "avg_inside":  0,
+            "delta_total": d_total,
+            "delta_girls": d_girls,
+            "delta_boys":  d_boys,
+            "signal_total":  signal(d_total),
+            "signal_girls":  signal(d_girls),
+            "signal_boys":   signal(d_boys),
+            "sample_count":  bm["sample_count"],
+            "day_of_week":   night.day_of_week,
+            "used_hour":     bm.get("used_hour", cur_hour),
+            "used_minute":   bm.get("used_minute", 0),
         }
 
     return web.json_response({
-        "inside":        inside,
-        "girls_entered": girls_entered,
-        "boys_entered":  boys_entered,
-        "girls_inside":  split["girls_inside"],
-        "boys_inside":   split["boys_inside"],
-        "ratio_girls":   split["ratio_girls"],
-        "ratio_boys":    split["ratio_boys"],
-        "left":          left,
-        "denied":        denied,
-        "hourly":        hourly,
+        "inside":        ns["inside"],
+        "girls_entered": ns["total_girls"],
+        "boys_entered":  ns["total_boys"],
+        "girls_inside":  ns["girls_inside"],
+        "boys_inside":   ns["boys_inside"],
+        "ratio_girls":   ns["ratio_girls"],
+        "ratio_boys":    ns["ratio_boys"],
+        "left":          ns["total_left"],
+        "denied":        ns["total_denied"],
+        "hourly":        [{"time": h["time"], "entered": h["entered"]} for h in ns["hourly"]],
         "benchmark":     bm_data,
     })
 
@@ -207,19 +203,20 @@ async def api_night(request: web.Request) -> web.Response:
             return web.json_response({"empty": True})
 
         stats = await stats_repo.get_night_stats(session, night.id)
-        total_girls = sum(s.girls_entered for s in stats)
-        total_boys  = sum(s.boys_entered  for s in stats)
-        total = total_girls + total_boys
-        fc = await stats_service.get_fc_conversion(session, night.id)
-        ratio = await stats_service.get_ratio(session, night.id)
-        peak_time, peak_val = await stats_service.get_peak_hour(session, night.id)
-        hourly = [{
-            "time":   s.recorded_at.strftime("%H:%M"),
-            "entered": s.girls_entered + s.boys_entered,
-            "left":   s.left_count,
-            "girls":  s.girls_entered,
-            "boys":   s.boys_entered,
-        } for s in stats]
+        ns    = stats_service.compute_night_stats(stats)
+        total_girls = ns["total_girls"]
+        total_boys  = ns["total_boys"]
+        total       = ns["total"]
+        denied      = ns["total_denied"]
+        fc = round(total / (total + denied) * 100, 1) if (total + denied) > 0 else 0
+        ratio = (
+            round(total_girls / total * 100, 1) if total > 0 else 0,
+            round(total_boys  / total * 100, 1) if total > 0 else 0,
+        )
+        hourly = ns["hourly"]
+        peak_h = max(hourly, key=lambda h: h["entered"]) if hourly else None
+        peak_time = peak_h["time"] if peak_h else "—"
+        peak_val  = peak_h["entered"] if peak_h else 0
 
         MONTHS_SHORT = ['','янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек']
         DAY_RU = {"mon":"Пн","tue":"Вт","wed":"Ср","thu":"Чт","fri":"Пт","sat":"Сб","sun":"Вс"}
@@ -263,10 +260,10 @@ async def api_week(request: web.Request) -> web.Response:
         data = []
         for n in nights:
             stats = await stats_repo.get_night_stats(session, n.id)
-            total = sum(s.girls_entered + s.boys_entered for s in stats)
+            ns    = stats_service.compute_night_stats(stats)
             d = datetime.strptime(n.date, "%Y-%m-%d")
             label = f"{DAY_LABEL.get(n.day_of_week, n.day_of_week)} {d.day}"
-            data.append({"label": label, "total": total, "current": not n.closed_at})
+            data.append({"label": label, "total": ns["total"], "current": not n.closed_at})
     return web.json_response({"nights": data})
 
 
@@ -288,10 +285,10 @@ async def api_month(request: web.Request) -> web.Response:
         data = []
         for n in nights:
             stats = await stats_repo.get_night_stats(session, n.id)
-            total = sum(s.girls_entered + s.boys_entered for s in stats)
+            ns    = stats_service.compute_night_stats(stats)
             d = datetime.strptime(n.date, "%Y-%m-%d")
             label = f"{DAY_LABEL.get(n.day_of_week, '')} {d.day}"
-            data.append({"label": label, "total": total})
+            data.append({"label": label, "total": ns["total"]})
     return web.json_response({"nights": data})
 
 
@@ -312,11 +309,11 @@ async def api_kpi(request: web.Request) -> web.Response:
         total_g = total_b = total_denied = total_entered = 0
         for n in nights:
             stats = await stats_repo.get_night_stats(session, n.id)
-            for s in stats:
-                total_entered += s.girls_entered + s.boys_entered
-                total_g += s.girls_entered
-                total_b += s.boys_entered
-                total_denied += s.denied
+            ns    = stats_service.compute_night_stats(stats)
+            total_entered += ns["total"]
+            total_g       += ns["total_girls"]
+            total_b       += ns["total_boys"]
+            total_denied  += ns["total_denied"]
     fc      = round(total_entered / (total_entered + total_denied) * 100) if (total_entered + total_denied) > 0 else 0
     ratio_g = round(total_g / total_entered * 100) if total_entered > 0 else 0
 
@@ -339,8 +336,8 @@ async def api_kpi(request: web.Request) -> web.Response:
             async with AsyncSessionLocal() as s3:
                 st = await stats_repo.get_night_stats(s3, n.id)
                 if st:
-                    ins = sum(s.girls_entered + s.boys_entered for s in st) - sum(s.left_count for s in st)
-                    all_inside.append(max(0, ins))
+                    ns3 = stats_service.compute_night_stats(st)
+                    all_inside.append(ns3["inside"])
         if all_inside:
             avg_inside = round(sum(all_inside) / len(all_inside))
 
