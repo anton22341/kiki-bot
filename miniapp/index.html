@@ -488,7 +488,6 @@
           <div class="occ-fill" id="live-bar" style="width:0%"></div>
         </div>
         <div style="font-size:13px;color:var(--w30);margin-top:4px;" id="live-pct">загрузка зала</div>
-        <div style="font-size:12px;margin-top:2px;" id="live-bm-inside"></div>
       </div>
 
       <!-- 4 карточки + doughnut рядом -->
@@ -499,13 +498,11 @@
               <div class="lbl">👧 Внутри</div>
               <div class="val" id="live-girls-in">—</div>
               <div class="sub">вошло: <span id="live-girls-entered">—</span></div>
-              <div style="font-size:11px;margin-top:2px;" id="live-bm-girls"></div>
             </div>
             <div class="stat-card">
               <div class="lbl">👦 Внутри</div>
               <div class="val" id="live-boys-in">—</div>
               <div class="sub">вошло: <span id="live-boys-entered">—</span></div>
-              <div style="font-size:11px;margin-top:2px;" id="live-bm-boys"></div>
             </div>
             <div class="stat-card"><div class="lbl">🚪 Ушло всего</div><div class="val" id="live-left">—</div></div>
             <div class="stat-card"><div class="lbl">🚫 Отказано</div><div class="val" id="live-denied">—</div></div>
@@ -527,8 +524,9 @@
 
       <!-- Benchmark блок -->
       <div class="card" id="live-bm-block" style="display:none">
-        <div class="card-title">📊 В это же время обычно</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+        <div class="card-title">📊 Поток за последний час — сравнение с историей</div>
+        <div style="font-size:11px;color:var(--w30);margin-bottom:8px;" id="bm-subtitle">сколько вошло за этот час vs среднее в прошлые недели</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0px;">
           <div style="text-align:center;flex:1;">
             <div style="font-size:11px;color:var(--w30);margin-bottom:2px;">Всего</div>
             <div style="font-size:18px;font-weight:600;" id="bm-avg-total">—</div>
@@ -1093,9 +1091,7 @@ async function loadLive() {
       return `<span style="color:${c}">${e} ${sign}${delta}% avg ~${Math.round(avg)}</span>`;
     }
     const bm = d.benchmark;
-    document.getElementById('live-bm-inside').innerHTML = bm ? fmtBm(bm.delta_total,  bm.signal_total,  bm.avg_total)  : '';
-    document.getElementById('live-bm-girls').innerHTML  = bm ? fmtBm(bm.delta_girls,  bm.signal_girls,  bm.avg_girls)  : '';
-    document.getElementById('live-bm-boys').innerHTML   = bm ? fmtBm(bm.delta_boys,   bm.signal_boys,   bm.avg_boys)   : '';
+    // мини-bm убраны из карточек — только в отдельном блоке ниже
 
     // Benchmark блок над графиком
     const bmBlock = document.getElementById('live-bm-block');
