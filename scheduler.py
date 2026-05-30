@@ -57,13 +57,6 @@ async def hourly_report(bot: Bot) -> None:
 def start_scheduler(bot: Bot) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
-        hourly_report,
-        trigger="cron",
-        hour="23,0,1,2,3,4,5",
-        minute=5,
-        args=[bot],
-    )
-    scheduler.add_job(
         close_night_job,
         trigger="cron",
         hour=8,

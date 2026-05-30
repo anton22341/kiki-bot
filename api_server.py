@@ -575,7 +575,7 @@ async def _send_input_notification(night_id: int, now) -> None:
             inside_line += f"  ({inside_trend})"
 
         text = (
-            f"⏱ {now.strftime('%H:%M')} · {date_str}\n\n"
+            f"⏱ Hourly Report · {now.strftime('%H:%M')} · {date_str}\n\n"
             f"{inside_line}\n"
             f"{bm_lines}\n\n"
             f"За ночь:\n"
