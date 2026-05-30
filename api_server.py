@@ -487,7 +487,114 @@ async def api_input(request: web.Request) -> web.Response:
             "created_by":     user.id,
         })
 
+    # Уведомление superadmin/owner только ночью (22:00–08:00)
+    real_now = now_msk()
+    if real_now.hour >= 22 or real_now.hour < 8:
+        try:
+            await _send_input_notification(night.id, real_now)
+        except Exception as e:
+            logger.error("input notification error: %s", e)
+
     return web.json_response({"ok": True})
+
+
+async def _send_input_notification(night_id: int, now) -> None:
+    """Отправляет уведомление с новыми данными и бенчмарком."""
+    from aiogram import Bot
+    from services.stats_service import compute_night_stats, get_benchmark, _emoji, _signal
+
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+        from models.db import ClubNight
+        res = await session.execute(select(ClubNight).where(ClubNight.id == night_id))
+        night = res.scalar_one_or_none()
+        if not night:
+            return
+
+        stats = await stats_repo.get_night_stats(session, night_id)
+        ns = compute_night_stats(stats)
+        if not ns["hourly"]:
+            return
+
+        hourly   = ns["hourly"]
+        last_h   = hourly[-1]
+        cur_hour = int(last_h["time"].split(":")[0])
+
+        # Динамика inside vs предыдущая запись
+        prev_inside = None
+        if len(stats) >= 2:
+            prev_ns = compute_night_stats(stats[:-1])
+            prev_inside = prev_ns["inside"]
+        inside = ns["inside"]
+        if prev_inside is not None and prev_inside > 0:
+            diff_pct = round((inside / prev_inside - 1) * 100)
+            if diff_pct > 0:
+                inside_trend = f"📈 +{diff_pct}% vs пред. час"
+            elif diff_pct < 0:
+                inside_trend = f"📉 {diff_pct}% vs пред. час"
+            else:
+                inside_trend = "➡️ без изменений"
+        else:
+            inside_trend = ""
+
+        bm = await get_benchmark(session, night_id, cur_hour, night.day_of_week)
+
+        DOW_RU = {"mon":"Пн","tue":"Вт","wed":"Ср","thu":"Чт","fri":"Пт","sat":"Сб","sun":"Вс"}
+        MONTHS_SHORT = ['','янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек']
+        from datetime import datetime as _dt
+        d = _dt.strptime(night.date, "%Y-%m-%d")
+        date_str = f"{DOW_RU.get(night.day_of_week,'')} {d.day} {MONTHS_SHORT[d.month]}"
+
+        fc = round(ns["total"] / (ns["total"] + ns["total_denied"]) * 100) if (ns["total"] + ns["total_denied"]) > 0 else 0
+        ratio_g = round(ns["total_girls"] / ns["total"] * 100) if ns["total"] > 0 else 0
+
+        # Строки бенчмарка
+        bm_lines = ""
+        if bm:
+            def bm_row(label, cur, avg, delta, signal):
+                if delta is None:
+                    return f"  {label} {cur} → avg {round(avg)}"
+                em = _emoji(_signal(delta))
+                sign = "+" if delta >= 0 else ""
+                return f"  {label} {cur} → avg {round(avg)}  {em} {sign}{delta}%"
+
+            DOW_GENITIVE = {"fri":"пятницам","sat":"субботам","mon":"понедельникам",
+                           "tue":"вторникам","wed":"средам","thu":"четвергам","sun":"воскресеньям"}
+            sample_note = f"avg по {DOW_GENITIVE.get(night.day_of_week, night.day_of_week)} · {bm.get('used_hour',cur_hour):02d}:{bm.get('used_minute',0):02d}"
+
+            bm_lines = (
+                f"\nЭтот час:\n"
+                f"{bm_row('Всего', last_h['entered'],   bm['avg_total'], bm.get('delta_total'), bm.get('signal_total'))}\n"
+                f"{bm_row('👧',    last_h['girls'],      bm['avg_girls'], bm.get('delta_girls'), bm.get('signal_girls'))}\n"
+                f"{bm_row('👦',    last_h['boys'],       bm['avg_boys'],  bm.get('delta_boys'),  bm.get('signal_boys'))}\n"
+                f"  📊 {sample_note}"
+            )
+
+        inside_line = f"👥 Внутри: {inside} чел"
+        if inside_trend:
+            inside_line += f"  ({inside_trend})"
+
+        text = (
+            f"⏱ {now.strftime('%H:%M')} · {date_str}\n\n"
+            f"{inside_line}\n"
+            f"{bm_lines}\n\n"
+            f"За ночь:\n"
+            f"  Вошло: {ns['total']}  |  Ушло: {ns['total_left']}  |  🚫 {ns['total_denied']}\n"
+            f"  👧 {ratio_g}%  👦 {100-ratio_g}%  |  FC {fc}%"
+        )
+
+        recipients = (
+            await user_repo.get_by_role(session, "superadmin") +
+            await user_repo.get_by_role(session, "owner")
+        )
+
+    bot = Bot(token=settings.BOT_TOKEN)
+    for u in recipients:
+        try:
+            await bot.send_message(u.telegram_id, text)
+        except Exception as e:
+            logger.warning("notify %s: %s", u.telegram_id, e)
+    await bot.session.close()
 
 
 @require_auth
